@@ -349,8 +349,6 @@
 
   <div class="journeys">
 
-    <!-- YOUR JOURNEY -->
-
     <div class="journey-card">
 
       <div class="journey-title">
@@ -415,8 +413,6 @@
 
     </div>
 
-
-    <!-- OTHER JOURNEY -->
 
     <div class="journey-card">
 
@@ -504,9 +500,7 @@
 
   <div id="status"></div>
 
-
   <div id="result"></div>
-
 
   <div id="map"></div>
 
@@ -927,40 +921,140 @@ function drawRoutes(data) {
 
   clearMap();
 
-
+  // 🔵 Person A — BLUE
   const routeA =
     L.geoJSON(
       data.routeA,
       {
         style: {
-          weight: 5
+          color: "#2563eb",
+          weight: 6,
+          opacity: 0.9,
+          lineCap: "round",
+          lineJoin: "round"
         }
       }
     ).addTo(map);
 
 
+  // 🟢 Person B — GREEN
   const routeB =
     L.geoJSON(
       data.routeB,
       {
         style: {
-          weight: 5,
-          dashArray: "8 8"
+          color: "#16a34a",
+          weight: 6,
+          opacity: 0.9,
+          lineCap: "round",
+          lineJoin: "round"
         }
       }
     ).addTo(map);
 
 
+  // 🔵 Person A pickup
+  const aPickup =
+    L.circleMarker(
+      [
+        data.a.pickup.lat,
+        data.a.pickup.lon
+      ],
+      {
+        radius: 8,
+        color: "#ffffff",
+        weight: 3,
+        fillColor: "#2563eb",
+        fillOpacity: 1
+      }
+    )
+    .bindTooltip(
+      "Person A • Start"
+    )
+    .addTo(map);
+
+
+  // 🔵 Person A destination
+  const aDrop =
+    L.circleMarker(
+      [
+        data.a.drop.lat,
+        data.a.drop.lon
+      ],
+      {
+        radius: 8,
+        color: "#ffffff",
+        weight: 3,
+        fillColor: "#2563eb",
+        fillOpacity: 1
+      }
+    )
+    .bindTooltip(
+      "Person A • Destination"
+    )
+    .addTo(map);
+
+
+  // 🟢 Person B pickup
+  const bPickup =
+    L.circleMarker(
+      [
+        data.b.pickup.lat,
+        data.b.pickup.lon
+      ],
+      {
+        radius: 8,
+        color: "#ffffff",
+        weight: 3,
+        fillColor: "#16a34a",
+        fillOpacity: 1
+      }
+    )
+    .bindTooltip(
+      "Person B • Start"
+    )
+    .addTo(map);
+
+
+  // 🟢 Person B destination
+  const bDrop =
+    L.circleMarker(
+      [
+        data.b.drop.lat,
+        data.b.drop.lon
+      ],
+      {
+        radius: 8,
+        color: "#ffffff",
+        weight: 3,
+        fillColor: "#16a34a",
+        fillOpacity: 1
+      }
+    )
+    .bindTooltip(
+      "Person B • Destination"
+    )
+    .addTo(map);
+
+
   routeLayers.push(
     routeA,
-    routeB
+    routeB,
+    aPickup,
+    aDrop,
+    bPickup,
+    bDrop
   );
 
 
   const bounds =
     L.featureGroup([
       routeA,
-      routeB
+      routeB,
+      aPickup,
+      aDrop,
+      bPickup,
+      bDrop
     ]).getBounds();
 
 
