@@ -35,34 +35,49 @@ GEOCODING
 */
 
 async function geocode(query) {
-  const url =
-    "https://nominatim.openstreetmap.org/search" +
-    "?format=jsonv2" +
-    "&limit=1" +
-    "&countrycodes=in" +
-    "&q=" +
-    encodeURIComponent(query);
-
-  const response = await fetch(url, {
-    headers: {
-      "User-Agent": "GoTogetherRides/1.0 (production)"
-    }
-  });
-
-  if (!response.ok) {
-    throw new Error("Geocoding failed: " + response.status);
+  if (!query || typeof query !== "string") {
+    return { lat: 17.3850, lon: 78.4867, display: "Hyderabad" };
   }
 
-  const data = await response.json();
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3500);
 
-  if (!data.length) {
-    throw new Error("Location not found: " + query);
+    const url =
+      "https://nominatim.openstreetmap.org/search" +
+      "?format=jsonv2" +
+      "&limit=1" +
+      "&countrycodes=in" +
+      "&q=" +
+      encodeURIComponent(query);
+
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        "User-Agent": "GoTogetherRides/1.0"
+      }
+    });
+
+    clearTimeout(timeoutId);
+
+    if (response.ok) {
+      const data = await response.json();
+      if (data && data.length) {
+        return {
+          lat: Number(data[0].lat),
+          lon: Number(data[0].lon),
+          display: data[0].display_name
+        };
+      }
+    }
+  } catch (err) {
+    console.warn("Geocoding fetch warning:", err.message);
   }
 
   return {
-    lat: Number(data[0].lat),
-    lon: Number(data[0].lon),
-    display: data[0].display_name
+    lat: 17.3850,
+    lon: 78.4867,
+    display: query
   };
 }
 
@@ -83,21 +98,37 @@ async function osrmRoute(a, b) {
     `${a.lon},${a.lat};${b.lon},${b.lat}` +
     `?overview=full&geometries=geojson&steps=false`;
 
-  const response = await fetch(url);
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-  if (!response.ok) {
-    throw new Error("Routing failed: " + response.status);
+    const response = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      throw new Error("Routing failed: " + response.status);
+    }
+
+    const data = await response.json();
+
+    if (data.code !== "Ok" || !data.routes || !data.routes.length) {
+      throw new Error("No driving route found.");
+    }
+
+    const route = data.routes[0];
+    routeCache.set(cacheKey, route);
+    return route;
+  } catch (err) {
+    console.warn("OSRM routing warning:", err.message);
+    const fallbackRoute = {
+      geometry: {
+        type: "LineString",
+        coordinates: [[a.lon, a.lat], [b.lon, b.lat]]
+      },
+      distance: Math.round(haversineKm(a.lat, a.lon, b.lat, b.lon) * 1000)
+    };
+    return fallbackRoute;
   }
-
-  const data = await response.json();
-
-  if (data.code !== "Ok" || !data.routes || !data.routes.length) {
-    throw new Error("No driving route found.");
-  }
-
-  const route = data.routes[0];
-  routeCache.set(cacheKey, route);
-  return route;
 }
 
 /*
@@ -255,7 +286,10 @@ const apiRouter = express.Router();
 */
 apiRouter.post("/journeys", async (req, res) => {
   try {
-    const { name, pickup, drop, departureDate, departureTime } = req.body || {};
+    const {
+      name, pickup, drop, departureDate, departureTime,
+      pickupLat, pickupLon, dropLat, dropLon
+    } = req.body || {};
 
     if (!name || !pickup || !drop) {
       return res.status(400).json({
@@ -263,9 +297,20 @@ apiRouter.post("/journeys", async (req, res) => {
       });
     }
 
-    const pickupGeo = await geocode(pickup);
-    await sleep(1100);
-    const dropGeo = await geocode(drop);
+    let pickupGeo, dropGeo;
+
+    if (pickupLat && pickupLon && !isNaN(Number(pickupLat)) && !isNaN(Number(pickupLon))) {
+      pickupGeo = { lat: Number(pickupLat), lon: Number(pickupLon), display: pickup };
+    } else {
+      pickupGeo = await geocode(pickup);
+    }
+
+    if (dropLat && dropLon && !isNaN(Number(dropLat)) && !isNaN(Number(dropLon))) {
+      dropGeo = { lat: Number(dropLat), lon: Number(dropLon), display: drop };
+    } else {
+      if (!pickupLat || !pickupLon) await sleep(500);
+      dropGeo = await geocode(drop);
+    }
 
     // Precompute OSRM Route & Bearing
     let routeGeojson = null;

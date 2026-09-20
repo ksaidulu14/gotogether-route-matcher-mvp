@@ -1491,10 +1491,25 @@
 
       try {
         // 1. SAVE USER SCHEDULED JOURNEY
+        const rawPLat = pickupInput.getAttribute("data-lat");
+        const rawPLon = pickupInput.getAttribute("data-lon");
+        const rawDLat = dropInput.getAttribute("data-lat");
+        const rawDLon = dropInput.getAttribute("data-lon");
+
         const saveResponse = await fetch("/api/journeys", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name, pickup, drop, departureDate, departureTime })
+          body: JSON.stringify({
+            name,
+            pickup,
+            drop,
+            pickupLat: rawPLat ? parseFloat(rawPLat) : undefined,
+            pickupLon: rawPLon ? parseFloat(rawPLon) : undefined,
+            dropLat: rawDLat ? parseFloat(rawDLat) : undefined,
+            dropLon: rawDLon ? parseFloat(rawDLon) : undefined,
+            departureDate,
+            departureTime
+          })
         });
 
         const saved = await saveResponse.json();
