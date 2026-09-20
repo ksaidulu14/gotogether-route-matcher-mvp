@@ -242,6 +242,37 @@
       color: var(--text-light);
     }
 
+    /* RADIUS TOGGLE GROUP */
+    .radius-toggle-group {
+      display: flex;
+      gap: 10px;
+    }
+
+    .radius-btn {
+      flex: 1;
+      height: 44px;
+      border: 1px solid var(--border-color);
+      background: #f8fafc;
+      color: var(--text-muted);
+      border-radius: var(--radius-sm);
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .radius-btn:hover {
+      background: #f1f5f9;
+      color: var(--text-main);
+    }
+
+    .radius-btn.active {
+      background: #eff6ff;
+      border-color: var(--primary-blue);
+      color: var(--primary-blue);
+      box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+    }
+
     /* AUTOCOMPLETE SUGGESTIONS */
     .suggestions {
       position: absolute;
@@ -419,6 +450,22 @@
       line-height: 1.5;
     }
 
+    .why-telemetry {
+      display: flex;
+      gap: 12px;
+      margin-top: 12px;
+      font-size: 12.5px;
+      font-weight: 600;
+      color: #059669;
+      flex-wrap: wrap;
+    }
+
+    .telemetry-chip {
+      background: rgba(16, 185, 129, 0.12);
+      padding: 3px 10px;
+      border-radius: 12px;
+    }
+
     /* MAP CONTAINER */
     #map {
       height: 480px;
@@ -465,16 +512,16 @@
     }
 
     .dot.their-route {
-      background: #f43f5e;
-      box-shadow: 0 0 0 3px rgba(244, 63, 94, 0.2);
+      background: #ff6b00;
+      box-shadow: 0 0 0 3px rgba(255, 107, 0, 0.2);
     }
 
     .dot.shared-route {
-      background: #059669;
+      background: #10b981;
       height: 6px;
       width: 20px;
       border-radius: 3px;
-      box-shadow: 0 0 0 2px rgba(5, 150, 105, 0.2);
+      box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
     }
 
     .dot.meeting-pin {
@@ -484,11 +531,18 @@
       font-size: 14px;
     }
 
-    .dot.nearby-pin {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 14px;
+    .dot.search-zone {
+      width: 12px;
+      height: 12px;
+      border: 1.5px dashed #2563eb;
+      background: rgba(37, 99, 235, 0.1);
+      border-radius: 50%;
+    }
+
+    .dot.pickup-connector {
+      width: 18px;
+      height: 0;
+      border-top: 2px dashed #8b5cf6;
     }
 
     /* RESULTS SECTION */
@@ -620,15 +674,33 @@
       color: #475569;
     }
 
-    .meeting-badge-sm {
+    .match-pills-wrap {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .distance-badge-sm {
       display: inline-flex;
       align-items: center;
-      gap: 6px;
-      color: #059669;
-      font-weight: 600;
-      background: #ecfdf5;
+      gap: 4px;
+      background: #f1f5f9;
+      color: #334155;
       padding: 4px 10px;
       border-radius: 8px;
+      font-weight: 600;
+    }
+
+    .shared-badge-sm {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background: #ecfdf5;
+      color: #059669;
+      padding: 4px 10px;
+      border-radius: 8px;
+      font-weight: 600;
     }
 
     .btn-view-route {
@@ -711,18 +783,6 @@
       justify-content: center;
     }
 
-    .pin-label-badge {
-      background: #ffffff;
-      color: #0f172a;
-      font-size: 11px;
-      font-weight: 700;
-      padding: 2px 6px;
-      border-radius: 4px;
-      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
-      white-space: nowrap;
-      margin-left: 6px;
-    }
-
     /* MEETING PIN CUSTOM */
     .meeting-pin-container {
       display: flex;
@@ -734,11 +794,11 @@
     .meeting-pin-bubble {
       width: 32px;
       height: 32px;
-      background: #059669;
+      background: #10b981;
       border: 3px solid #ffffff;
       border-radius: 50% 50% 50% 0;
       transform: rotate(-45deg);
-      box-shadow: 0 4px 14px rgba(5, 150, 105, 0.5);
+      box-shadow: 0 4px 14px rgba(16, 185, 129, 0.5);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -752,7 +812,7 @@
     }
 
     .meeting-pin-label {
-      background: #059669;
+      background: #10b981;
       color: #ffffff;
       font-size: 11px;
       font-weight: 700;
@@ -910,6 +970,15 @@
           <div id="dropSuggestions" class="suggestions"></div>
         </div>
 
+        <!-- SEARCH RADIUS SELECTOR -->
+        <div class="field">
+          <label class="field-label">Search Radius Zone</label>
+          <div class="radius-toggle-group">
+            <button type="button" class="radius-btn active" data-radius="5">5 km radius</button>
+            <button type="button" class="radius-btn" data-radius="10">10 km radius</button>
+          </div>
+        </div>
+
         <!-- ACTION BUTTONS -->
         <div class="actions">
           <button id="find">
@@ -945,6 +1014,11 @@
       <div class="why-explanation" id="whyText">
         Your journeys share a significant part of the same route.
       </div>
+      <div class="why-telemetry">
+        <span class="telemetry-chip" id="chipPickupDist">Pickup: -- km</span>
+        <span class="telemetry-chip" id="chipSharedDist">Shared: -- km</span>
+        <span class="telemetry-chip" id="chipLatency">Matched in --ms</span>
+      </div>
     </div>
 
     <!-- MAP DISPLAY -->
@@ -969,8 +1043,12 @@
         Suggested meeting point
       </span>
       <span>
-        <span class="dot nearby-pin">👤</span>
-        Journeys near your route
+        <i class="dot search-zone"></i>
+        Search zone
+      </span>
+      <span>
+        <i class="dot pickup-connector"></i>
+        Pickup connector
       </span>
     </div>
 
@@ -992,7 +1070,7 @@
 
     /*
     ==================================================
-    MAP INITIALIZATION
+    MAP INITIALIZATION & STATE
     ==================================================
     */
 
@@ -1012,7 +1090,16 @@
     let currentMatches = [];
     let activeJourneysData = [];
     let nearbyClusterGroup = null;
+    let selectedRadiusKm = 5;
 
+    // Handle Radius Toggle Buttons
+    document.querySelectorAll(".radius-btn").forEach(btn => {
+      btn.addEventListener("click", function() {
+        document.querySelectorAll(".radius-btn").forEach(b => b.classList.remove("active"));
+        this.classList.add("active");
+        selectedRadiusKm = Number(this.getAttribute("data-radius")) || 5;
+      });
+    });
 
     /*
     ==================================================
@@ -1076,7 +1163,6 @@
       return formatCleanName(place.display_name);
     }
 
-
     /*
     ==================================================
     CLEAR MAP & PANELS
@@ -1093,10 +1179,8 @@
       });
 
       mapLayers = [];
-
       document.getElementById("whyMatchedPanel").style.display = "none";
     }
-
 
     /*
     ==================================================
@@ -1189,7 +1273,6 @@
     setupSuggestions("pickup", "pickupSuggestions");
     setupSuggestions("drop", "dropSuggestions");
 
-
     /*
     ==================================================
     CORRIDOR GEOMETRY CALCULATIONS
@@ -1244,16 +1327,15 @@
       return sharedSegments;
     }
 
-
     /*
     ==================================================
-    LOAD & RENDER NEARBY JOURNEYS (RAPIDO-LIKE CLUSTERS)
+    LOAD & RENDER NEARBY JOURNEYS (EXPLICIT CLUSTER LABELS)
     ==================================================
     */
 
     async function loadNearbyJourneys() {
       try {
-        const response = await fetch("/api/journeys");
+        const response = await fetch(`/api/journeys?searchRadiusKm=${selectedRadiusKm}`);
         if (!response.ok) return;
 
         const data = await response.json();
@@ -1276,9 +1358,10 @@
         iconCreateFunction: function(cluster) {
           const count = cluster.getChildCount();
           return L.divIcon({
-            html: '<div style="background:#2563eb;color:#fff;font-weight:700;border-radius:50%;width:36px;height:36px;display:flex;align-items:center;justify-content:center;border:3px solid #fff;box-shadow:0 3px 10px rgba(37,99,235,0.4);font-size:13px;">' + count + '</div>',
+            html: '<div style="background:#2563eb;color:#fff;font-weight:700;border-radius:20px;padding:4px 10px;display:flex;align-items:center;justify-content:center;border:2px solid #fff;box-shadow:0 3px 10px rgba(37,99,235,0.4);font-size:12px;white-space:nowrap;">' + count + ' journeys</div>',
             className: 'cluster-marker-custom',
-            iconSize: [36, 36]
+            iconSize: [80, 32],
+            iconAnchor: [40, 16]
           });
         }
       });
@@ -1317,7 +1400,7 @@
           '<div style="padding: 4px; font-family: inherit;">' +
             '<div style="font-weight: 700; font-size: 15px; margin-bottom: 4px; color: #0f172a;">' + escapeHtml(personName) + '</div>' +
             '<div style="font-size: 13px; color: #475569; margin-bottom: 8px;">' + escapeHtml(cleanPickup) + ' &rarr; ' + escapeHtml(cleanDrop) + '</div>' +
-            '<div style="font-size: 11px; color: #64748b; font-weight: 600;">Journey near your route</div>' +
+            '<div style="font-size: 11px; color: #64748b; font-weight: 600;">Active journey near your route</div>' +
           '</div>';
 
         marker.bindPopup(popupContent);
@@ -1329,10 +1412,9 @@
 
     loadNearbyJourneys();
 
-
     /*
     ==================================================
-    DRAW MATCH ON MAP (DISTINCTION & ELEVATED MEETING PIN)
+    DRAW MATCH ON MAP (3-COLOR OVERLAY + SEARCH CIRCLE + DOTTED CONNECTOR)
     ==================================================
     */
 
@@ -1342,7 +1424,21 @@
       const coordsA = matchData.routeA.coordinates;
       const coordsB = matchData.routeB.coordinates;
 
-      // 1. User Route Line (Solid Blue)
+      // 1. Render Search Zone Radius Circle around User A Pickup
+      const searchCircle = L.circle(
+        [matchData.a.pickup.lat, matchData.a.pickup.lon],
+        {
+          radius: (matchData.searchRadiusKm || selectedRadiusKm) * 1000,
+          color: "#2563eb",
+          fillColor: "#2563eb",
+          fillOpacity: 0.07,
+          weight: 1.5,
+          dashArray: "4, 4"
+        }
+      ).addTo(map);
+      mapLayers.push(searchCircle);
+
+      // 2. User Route Line (Solid Electric Blue)
       const routeA = L.geoJSON(matchData.routeA, {
         style: {
           color: "#2563eb",
@@ -1353,10 +1449,10 @@
         }
       }).addTo(map);
 
-      // 2. Candidate Route Line (Coral Red Dashed)
+      // 3. Candidate Route Line (Coral Orange)
       const routeB = L.geoJSON(matchData.routeB, {
         style: {
-          color: "#f43f5e",
+          color: "#ff6b00",
           weight: 5,
           opacity: 0.85,
           dashArray: "6, 8",
@@ -1367,20 +1463,36 @@
 
       mapLayers.push(routeA, routeB);
 
-      // 3. Highlighted Shared Route Corridor (Emerald Green)
+      // 4. Highlighted Shared Route Corridor (Emerald Green)
       const sharedSegments = extractSharedSegments(coordsA, coordsB, 1000);
       sharedSegments.forEach(segment => {
         const sharedPolyline = L.polyline(segment, {
-          color: "#059669",
-          weight: 9,
-          opacity: 0.9,
+          color: "#10b981",
+          weight: 8,
+          opacity: 0.95,
           lineCap: "round",
           lineJoin: "round"
         }).addTo(map);
         mapLayers.push(sharedPolyline);
       });
 
-      // 4. Start & Destination Markers with Distinct Icons
+      // 5. Dotted Pickup-to-Pickup Connector Line
+      const pickupConnector = L.polyline(
+        [
+          [matchData.a.pickup.lat, matchData.a.pickup.lon],
+          [matchData.b.pickup.lat, matchData.b.pickup.lon]
+        ],
+        {
+          color: "#8b5cf6",
+          weight: 2.5,
+          dashArray: "5, 8"
+        }
+      )
+      .bindTooltip(`Pickup ${matchData.pickupDistanceKm || 0} km away`, { permanent: false, direction: "center" })
+      .addTo(map);
+      mapLayers.push(pickupConnector);
+
+      // 6. Start & Destination Markers with Distinct Icons
       const userStartIcon = L.divIcon({
         className: 'marker-pin-custom',
         html: `<div style="background:#2563eb;width:16px;height:16px;border-radius:50%;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.3);"></div>`,
@@ -1397,33 +1509,33 @@
 
       const candidateStartIcon = L.divIcon({
         className: 'marker-pin-custom',
-        html: `<div style="background:#f43f5e;width:16px;height:16px;border-radius:50%;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.3);"></div>`,
+        html: `<div style="background:#ff6b00;width:16px;height:16px;border-radius:50%;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.3);"></div>`,
         iconSize: [16, 16],
         iconAnchor: [8, 8]
       });
 
       const candidateEndIcon = L.divIcon({
         className: 'marker-pin-custom',
-        html: `<div style="background:#be123c;width:18px;height:18px;border-radius:4px;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;color:#fff;font-size:10px;font-weight:700;">🎯</div>`,
+        html: `<div style="background:#c2410c;width:18px;height:18px;border-radius:4px;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;color:#fff;font-size:10px;font-weight:700;">🎯</div>`,
         iconSize: [18, 18],
         iconAnchor: [9, 9]
       });
 
       const aPickup = L.marker([matchData.a.pickup.lat, matchData.a.pickup.lon], { icon: userStartIcon })
-        .bindTooltip("You start", { permanent: false, direction: "top" }).addTo(map);
+        .bindTooltip("Your pickup", { permanent: false, direction: "top" }).addTo(map);
 
       const aDrop = L.marker([matchData.a.drop.lat, matchData.a.drop.lon], { icon: userEndIcon })
-        .bindTooltip("You end", { permanent: false, direction: "top" }).addTo(map);
+        .bindTooltip("Your destination", { permanent: false, direction: "top" }).addTo(map);
 
       const bPickup = L.marker([matchData.b.pickup.lat, matchData.b.pickup.lon], { icon: candidateStartIcon })
-        .bindTooltip("They start", { permanent: false, direction: "top" }).addTo(map);
+        .bindTooltip("Their pickup", { permanent: false, direction: "top" }).addTo(map);
 
       const bDrop = L.marker([matchData.b.drop.lat, matchData.b.drop.lon], { icon: candidateEndIcon })
-        .bindTooltip("They end", { permanent: false, direction: "top" }).addTo(map);
+        .bindTooltip("Their destination", { permanent: false, direction: "top" }).addTo(map);
 
       mapLayers.push(aPickup, aDrop, bPickup, bDrop);
 
-      // 5. Visually Prominent Meeting Point Pin (Elevated zIndexOffset: 1000)
+      // 7. Visually Prominent Meeting Point Pin (Elevated zIndexOffset: 1000)
       if (meetingData && meetingData.found && meetingData.meetingPoint) {
         const point = meetingData.meetingPoint;
 
@@ -1433,10 +1545,10 @@
             <div class="meeting-pin-bubble">
               <div class="meeting-pin-dot"></div>
             </div>
-            <div class="meeting-pin-label">Meet here</div>
+            <div class="meeting-pin-label">Suggested meeting point</div>
           </div>`,
-          iconSize: [70, 50],
-          iconAnchor: [35, 32],
+          iconSize: [140, 50],
+          iconAnchor: [70, 32],
           popupAnchor: [0, -32]
         });
 
@@ -1451,10 +1563,14 @@
         mapLayers.push(meetingMarker);
       }
 
-      // 6. Update "Why this matched" Panel
+      // 8. Update "Why this matched" Panel & Telemetry Chips
       const score = matchData.routeMatchPercent || 0;
       const overlap = matchData.routeOverlapPercent || 0;
       const align = matchData.directionAlignmentPercent || 0;
+      const pickupDist = matchData.pickupDistanceKm !== undefined ? matchData.pickupDistanceKm : "--";
+      const sharedDist = matchData.sharedRouteDistanceKm !== undefined ? matchData.sharedRouteDistanceKm : "--";
+      const latencyMs = matchData.timing ? matchData.timing.totalMs : "--";
+      const candidateCount = matchData.timing ? matchData.timing.candidateCount : 0;
 
       let alignLabel = "Aligned direction";
       if (align >= 75) {
@@ -1468,9 +1584,14 @@
       document.getElementById("whyAlign").textContent = alignLabel;
       document.getElementById("whyText").textContent =
         "Your journeys share a significant part of the same route (" + overlap + "% route overlap with " + alignLabel.toLowerCase() + ").";
+
+      document.getElementById("chipPickupDist").textContent = `Pickup: ${pickupDist} km away`;
+      document.getElementById("chipSharedDist").textContent = `Shared: ${sharedDist} km`;
+      document.getElementById("chipLatency").textContent = `Matched in ${latencyMs} ms (${candidateCount} candidates evaluated)`;
+
       document.getElementById("whyMatchedPanel").style.display = "block";
 
-      // 7. Automatic Fit Bounds
+      // 9. Automatic Fit Bounds
       const bounds = L.featureGroup(mapLayers).getBounds();
       map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
 
@@ -1478,7 +1599,6 @@
         map.invalidateSize();
       }, 100);
     }
-
 
     /*
     ==================================================
@@ -1508,7 +1628,6 @@
       // Smooth scroll to map
       document.getElementById("map").scrollIntoView({ behavior: "smooth", block: "nearest" });
     }
-
 
     /*
     ==================================================
@@ -1566,6 +1685,8 @@
         const score = match.data.routeMatchPercent || 0;
         const overlap = match.data.routeOverlapPercent || 0;
         const align = match.data.directionAlignmentPercent || 0;
+        const pickupDist = match.data.pickupDistanceKm !== undefined ? match.data.pickupDistanceKm : "--";
+        const sharedDist = match.data.sharedRouteDistanceKm !== undefined ? match.data.sharedRouteDistanceKm : "--";
 
         const hasMeetingPoint = match.meetingData && match.meetingData.found;
 
@@ -1593,10 +1714,12 @@
             '</div>' +
 
             '<div class="match-meta-row">' +
-              '<div>' +
-                '<span><strong>' + overlap + '%</strong> route overlap</span> &bull; <span>' + escapeHtml(alignLabel) + '</span>' +
+              '<div class="match-pills-wrap">' +
+                '<span class="distance-badge-sm">📍 ' + pickupDist + ' km away</span>' +
+                '<span class="shared-badge-sm">🛣️ ' + sharedDist + ' km shared</span>' +
+                '<span><strong>' + overlap + '%</strong> overlap</span>' +
               '</div>' +
-              (hasMeetingPoint ? '<div class="meeting-badge-sm">📍 Meeting point available</div>' : '') +
+              (hasMeetingPoint ? '<div class="meeting-badge-sm">📍 Meeting point</div>' : '') +
               '<button class="btn-view-route" onclick="selectMatch(' + idx + ')">View journey</button>' +
             '</div>' +
           '</div>';
@@ -1628,10 +1751,9 @@
       renderMatchCards();
     }
 
-
     /*
     ==================================================
-    FIND PEOPLE GOING MY WAY
+    FIND PEOPLE GOING MY WAY - PRODUCTION SINGLE REQUEST FLOW
     ==================================================
     */
 
@@ -1652,7 +1774,7 @@
       findButton.disabled = true;
       findButton.innerHTML = '<span>Finding journeys...</span>';
 
-      status.innerHTML = '<div class="status-spinner"></div><span>Finding journeys going your way...</span>';
+      status.innerHTML = '<div class="status-spinner"></div><span>Saving journey & querying spatial candidates...</span>';
 
       results.style.display = "none";
       clearMap();
@@ -1671,78 +1793,38 @@
           throw new Error(saved.error || "Could not save your journey.");
         }
 
-        // 2. LOAD ACTIVE JOURNEYS
-        status.innerHTML = '<div class="status-spinner"></div><span>Comparing routes...</span>';
+        // 2. PRODUCTION SINGLE MATCH-SEARCH REQUEST
+        status.innerHTML = '<div class="status-spinner"></div><span>Executing spatial candidate search...</span>';
 
-        const journeysResponse = await fetch("/api/journeys");
-        const journeysData = await journeysResponse.json();
+        const searchResponse = await fetch("/api/match-search", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            aPickup: pickup,
+            aDrop: drop,
+            aPickupLat: saved.journey.pickup.lat,
+            aPickupLon: saved.journey.pickup.lon,
+            aDropLat: saved.journey.drop.lat,
+            aDropLon: saved.journey.drop.lon,
+            searchRadiusKm: selectedRadiusKm
+          })
+        });
 
-        if (!journeysResponse.ok) {
-          throw new Error(journeysData.error || "Could not load journeys.");
+        const searchData = await searchResponse.json();
+
+        if (!searchResponse.ok) {
+          throw new Error(searchData.error || "Spatial candidate search failed.");
         }
 
-        // 3. FILTER OUT OWN JOURNEY
-        const candidates = (journeysData.journeys || [])
-          .filter(j => j.id !== saved.journey.id);
-
-        // Update nearby journey markers
-        renderNearbyJourneys(candidates);
-
-        // 4. MATCH CANDIDATES
-        const matches = [];
-
-        for (let i = 0; i < candidates.length; i++) {
-          const candidate = candidates[i];
-          const candidateName = (candidate.profiles && candidate.profiles.name)
-            ? candidate.profiles.name
-            : "Someone";
-
-          status.innerHTML =
-            '<div class="status-spinner"></div>' +
-            '<span>Checking journey ' + (i + 1) + ' of ' + candidates.length + '...</span>';
-
-          try {
-            const matchResponse = await fetch("/api/match", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                aPickup: pickup,
-                aDrop: drop,
-                aPickupLat: saved.journey.pickup.lat,
-                aPickupLon: saved.journey.pickup.lon,
-                aDropLat: saved.journey.drop.lat,
-                aDropLon: saved.journey.drop.lon,
-
-                bPickup: candidate.pickup_name,
-                bDrop: candidate.drop_name,
-                bPickupLat: candidate.pickup_lat,
-                bPickupLon: candidate.pickup_lon,
-                bDropLat: candidate.drop_lat,
-                bDropLon: candidate.drop_lon
-              })
-            });
-
-            const matchData = await matchResponse.json();
-
-            if (matchResponse.ok && matchData.matched) {
-              matches.push({
-                name: candidateName,
-                pickup: candidate.pickup_name,
-                drop: candidate.drop_name,
-                data: matchData,
-                meetingData: matchData.meetingData,
-                journey: candidate
-              });
-            }
-          } catch (error) {
-            console.error("Candidate matching error:", error);
-          }
+        const matches = (searchData.matches || []).filter(m => m.id !== saved.journey.id);
+        if (searchData.timing) {
+          matches.forEach(m => { if (m.data) m.data.timing = searchData.timing; });
         }
 
-        // 5. RENDER RESULTS
+        // 3. RENDER MATCH RESULTS
         showMatches(matches);
 
-        // 6. DRAW FIRST MATCH IF AVAILABLE
+        // 4. DRAW TOP MATCH IF AVAILABLE
         if (matches.length) {
           selectMatch(0);
           status.innerHTML = '';
@@ -1751,7 +1833,7 @@
         }
 
       } catch (error) {
-        console.error(error);
+        console.error("Search error:", error);
         status.innerHTML = '<span>' + escapeHtml(error.message || "Something went wrong.") + '</span>';
       } finally {
         findButton.disabled = false;
@@ -1763,7 +1845,6 @@
           '</svg>';
       }
     }
-
 
     /*
     ==================================================
@@ -1789,7 +1870,6 @@
       map.setView([17.385, 78.4867], 11);
       loadNearbyJourneys();
     }
-
 
     /*
     ==================================================
