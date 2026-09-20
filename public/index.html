@@ -3,117 +3,266 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GoTogether — Share the way</title>
 
-  <title>GoTogetherRides</title>
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-  <link
-    rel="stylesheet"
-    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-  >
+  <!-- Leaflet & MarkerCluster CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
 
   <style>
+    :root {
+      --bg-main: #f8fafc;
+      --surface-card: #ffffff;
+      --brand-blue: #0f172a;
+      --primary-blue: #2563eb;
+      --primary-hover: #1d4ed8;
+      --accent-gradient: linear-gradient(135deg, #1e40af 0%, #2563eb 100%);
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --text-light: #94a3b8;
+      --border-color: #e2e8f0;
+      --border-focus: #3b82f6;
+      --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+      --shadow-md: 0 4px 12px -2px rgba(15, 23, 42, 0.05), 0 2px 4px -1px rgba(15, 23, 42, 0.03);
+      --shadow-lg: 0 20px 30px -10px rgba(15, 23, 42, 0.08), 0 8px 15px -4px rgba(15, 23, 42, 0.04);
+      --radius-sm: 10px;
+      --radius-md: 14px;
+      --radius-lg: 20px;
+      --radius-xl: 24px;
+    }
 
     * {
       box-sizing: border-box;
+      margin: 0;
+      padding: 0;
     }
 
     body {
-      margin: 0;
-      font-family: Arial, sans-serif;
-      background: #f6f8fc;
-      color: #172033;
+      font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg-main);
+      color: var(--text-main);
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
     }
 
-    .container {
-      width: min(1050px, 94%);
-      margin: 38px auto 60px;
+    /* NAVBAR HEADER */
+    .navbar {
+      background: rgba(255, 255, 255, 0.85);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border-color);
+      position: sticky;
+      top: 0;
+      z-index: 100;
     }
 
-    .header {
-      text-align: center;
-      margin-bottom: 30px;
+    .nav-container {
+      max-width: 1040px;
+      margin: 0 auto;
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
     }
 
-    .logo {
-      font-size: 30px;
-      font-weight: 500;
-      margin-bottom: 8px;
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      text-decoration: none;
+      color: var(--text-main);
     }
 
-    .subtitle {
-      font-size: 17px;
-      color: #68758a;
+    .brand-logo {
+      width: 36px;
+      height: 36px;
+      background: var(--accent-gradient);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      box-shadow: 0 4px 10px rgba(37, 99, 235, 0.25);
     }
 
-    .journeys {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 18px;
+    .brand-logo svg {
+      width: 20px;
+      height: 20px;
+      stroke: currentColor;
+      stroke-width: 2.2;
+      fill: none;
     }
 
-    .journey-card {
-      background: white;
-      border: 1px solid #e2e7ef;
-      border-radius: 18px;
-      padding: 24px;
-      box-shadow: 0 4px 18px rgba(20, 30, 50, 0.03);
-    }
-
-    .journey-title {
+    .brand-name {
       font-size: 19px;
-      font-weight: 500;
-      margin-bottom: 20px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
     }
 
-    .field {
-      margin-bottom: 16px;
+    .brand-badge {
+      font-size: 12px;
+      font-weight: 600;
+      background: #eff6ff;
+      color: #1d4ed8;
+      padding: 4px 10px;
+      border-radius: 20px;
+      letter-spacing: 0.02em;
+    }
+
+    /* MAIN CONTAINER */
+    .container {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 40px 20px 80px;
+    }
+
+    /* HERO SECTION */
+    .hero {
+      text-align: center;
+      margin-bottom: 36px;
+    }
+
+    .hero-title {
+      font-size: 42px;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      color: var(--text-main);
+      margin-bottom: 12px;
+      line-height: 1.15;
+    }
+
+    .hero-subtitle {
+      font-size: 18px;
+      color: var(--text-muted);
+      font-weight: 400;
+      max-width: 520px;
+      margin: 0 auto;
+    }
+
+    /* SEARCH CARD */
+    .search-card {
+      background: var(--surface-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-xl);
+      padding: 32px;
+      box-shadow: var(--shadow-lg);
       position: relative;
     }
 
-    label {
-      display: block;
+    .card-header {
+      margin-bottom: 24px;
+    }
+
+    .card-title {
+      font-size: 20px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      color: var(--text-main);
+      margin-bottom: 4px;
+    }
+
+    .card-subtitle {
       font-size: 14px;
-      color: #68758a;
-      margin-bottom: 7px;
+      color: var(--text-muted);
     }
 
-    input {
+    .form-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .field {
+      position: relative;
+    }
+
+    .field-label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: #475569;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .input-wrapper {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .input-icon {
+      position: absolute;
+      left: 16px;
+      color: #94a3b8;
+      width: 20px;
+      height: 20px;
+      pointer-events: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .input-icon svg {
+      width: 20px;
+      height: 20px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 2;
+    }
+
+    input[type="text"] {
       width: 100%;
-      height: 52px;
-      padding: 0 15px;
-      border: 1px solid #d9e0ea;
-      border-radius: 11px;
-      font-size: 16px;
+      height: 54px;
+      padding: 0 16px 0 48px;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      font-family: inherit;
+      font-size: 15px;
+      color: var(--text-main);
+      background: #f8fafc;
       outline: none;
-      color: #172033;
-      background: white;
+      transition: all 0.2s ease;
     }
 
-    input:focus {
-      border-color: #2563eb;
-      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.08);
+    input[type="text"]:focus {
+      background: #ffffff;
+      border-color: var(--border-focus);
+      box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.12);
     }
 
+    input[type="text"]::placeholder {
+      color: var(--text-light);
+    }
+
+    /* AUTOCOMPLETE SUGGESTIONS */
     .suggestions {
       position: absolute;
-      top: 78px;
+      top: calc(100% + 6px);
       left: 0;
       right: 0;
-      background: white;
-      border: 1px solid #dce2eb;
-      border-radius: 11px;
-      box-shadow: 0 10px 25px rgba(20, 30, 50, 0.12);
+      background: #ffffff;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-lg);
       z-index: 1000;
-      overflow: hidden;
+      max-height: 260px;
+      overflow-y: auto;
       display: none;
     }
 
     .suggestion {
-      padding: 12px 14px;
+      padding: 12px 16px;
       cursor: pointer;
-      border-bottom: 1px solid #edf0f4;
-      font-size: 14px;
-      line-height: 1.35;
+      border-bottom: 1px solid #f1f5f9;
+      transition: background 0.15s ease;
     }
 
     .suggestion:last-child {
@@ -121,1177 +270,1537 @@
     }
 
     .suggestion:hover {
-      background: #f4f7fb;
+      background: #f8fafc;
     }
 
     .suggestion-main {
-      font-size: 15px;
-      color: #172033;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-main);
     }
 
     .suggestion-sub {
       font-size: 12px;
-      color: #7b8798;
-      margin-top: 3px;
+      color: var(--text-muted);
+      margin-top: 2px;
     }
 
+    /* ACTIONS */
     .actions {
       display: flex;
-      gap: 12px;
-      margin-top: 20px;
+      gap: 14px;
+      margin-top: 10px;
     }
 
     button {
-      height: 56px;
-      border-radius: 12px;
-      font-size: 16px;
-      cursor: pointer;
-      font-weight: 400;
-    }
-
-    #go,
-    #retry {
-      flex: 1;
-      border: none;
-      background: #2563eb;
-      color: white;
-    }
-
-    #go:hover,
-    #retry:hover {
-      background: #1d4ed8;
-    }
-
-    #retry {
-      display: none;
-    }
-
-    #clear {
-      flex: 1;
-      background: white;
-      border: 1px solid #d9e0ea;
-      color: #4b5563;
-    }
-
-    #status {
-      min-height: 24px;
-      text-align: center;
-      margin: 18px 0 4px;
-      color: #68758a;
+      font-family: inherit;
+      height: 54px;
+      border-radius: var(--radius-md);
       font-size: 15px;
-    }
-
-    #result {
-      display: none;
-      margin-top: 22px;
-    }
-
-    .result-box {
-      background: white;
-      border: 1px solid #e2e7ef;
-      border-radius: 18px;
-      padding: 28px;
-      box-shadow: 0 5px 22px rgba(20, 30, 50, 0.04);
-      animation: appear 0.35s ease;
-    }
-
-    @keyframes appear {
-      from {
-        opacity: 0;
-        transform: translateY(8px);
-      }
-
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
-    }
-
-    .result-heading {
-      display: flex;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: inline-flex;
       align-items: center;
-      gap: 12px;
-      font-size: 23px;
-      font-weight: 500;
-      margin-bottom: 25px;
-    }
-
-    .green-dot {
-      width: 17px;
-      height: 17px;
-      border-radius: 50%;
-      background: #35c978;
-      box-shadow: 0 0 0 6px rgba(53, 201, 120, 0.12);
-    }
-
-    .red-dot {
-      width: 17px;
-      height: 17px;
-      border-radius: 50%;
-      background: #ef4444;
-      box-shadow: 0 0 0 6px rgba(239, 68, 68, 0.10);
-    }
-
-    .match-title {
-      color: #15803d;
-    }
-
-    .no-match-title {
-      color: #b91c1c;
-    }
-
-    .people {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 14px;
-      margin-bottom: 20px;
-    }
-
-    .person-box {
-      background: #f8fafc;
-      border-radius: 13px;
-      padding: 17px;
-    }
-
-    .person-name {
-      font-size: 17px;
-      margin-bottom: 7px;
-    }
-
-    .person-route {
-      color: #536176;
-      font-size: 14px;
-      line-height: 1.5;
-    }
-
-    .message {
-      background: #f8fafc;
-      border-radius: 13px;
-      padding: 18px;
-      font-size: 16px;
-      line-height: 1.55;
-    }
-
-    .message strong {
-      font-weight: 500;
-    }
-
-    .simple-points {
-      margin-top: 18px;
-      display: grid;
+      justify-content: center;
       gap: 10px;
     }
 
-    .simple-point {
+    #find {
+      flex: 1;
+      border: none;
+      background: var(--accent-gradient);
+      color: #ffffff;
+      box-shadow: 0 4px 14px rgba(37, 99, 235, 0.3);
+    }
+
+    #find:hover {
+      background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%);
+      box-shadow: 0 6px 20px rgba(37, 99, 235, 0.4);
+      transform: translateY(-1px);
+    }
+
+    #find:active {
+      transform: translateY(0);
+    }
+
+    #find:disabled {
+      opacity: 0.75;
+      cursor: wait;
+      transform: none;
+    }
+
+    #clear {
+      width: 120px;
+      background: #ffffff;
+      border: 1px solid var(--border-color);
+      color: var(--text-muted);
+    }
+
+    #clear:hover {
+      background: #f1f5f9;
+      color: var(--text-main);
+      border-color: #cbd5e1;
+    }
+
+    /* STATUS CONTAINER */
+    #status {
+      min-height: 24px;
+      text-align: center;
+      margin: 24px 0;
       font-size: 15px;
+      font-weight: 500;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+    }
+
+    .status-spinner {
+      width: 18px;
+      height: 18px;
+      border: 2px solid #cbd5e1;
+      border-top-color: var(--primary-blue);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* WHY THIS MATCHED PANEL */
+    .why-matched-card {
+      display: none;
+      background: linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%);
+      border: 1px solid #bfdbfe;
+      border-radius: var(--radius-lg);
+      padding: 22px 26px;
+      margin-top: 24px;
+      box-shadow: var(--shadow-md);
+    }
+
+    .why-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+
+    .why-score-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 20px;
+      font-weight: 700;
+      color: #1e3a8a;
+    }
+
+    .why-score-num {
+      background: var(--primary-blue);
+      color: #ffffff;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 18px;
+    }
+
+    .why-metrics {
+      font-size: 14px;
+      font-weight: 600;
+      color: #3b82f6;
+    }
+
+    .why-explanation {
+      font-size: 14.5px;
       color: #334155;
-      padding: 12px 14px;
-      border-radius: 10px;
-      background: #fafbfd;
+      line-height: 1.5;
     }
 
-    .no-match-message {
-      background: #fafafa;
-      border-radius: 13px;
-      padding: 18px;
-      color: #596579;
-      font-size: 15px;
-      line-height: 1.55;
-    }
-
+    /* MAP CONTAINER */
     #map {
-      height: 500px;
-      margin-top: 22px;
-      border-radius: 18px;
+      height: 480px;
+      margin-top: 20px;
+      border-radius: var(--radius-xl);
       overflow: hidden;
-      border: 1px solid #e2e7ef;
+      border: 1px solid var(--border-color);
+      box-shadow: var(--shadow-lg);
     }
 
-    @media (max-width: 720px) {
+    /* LEGEND */
+    #legend {
+      display: flex;
+      gap: 18px;
+      margin-top: 16px;
+      font-size: 13.5px;
+      font-weight: 500;
+      color: var(--text-muted);
+      justify-content: center;
+      flex-wrap: wrap;
+      background: var(--surface-card);
+      padding: 14px 20px;
+      border-radius: 30px;
+      border: 1px solid var(--border-color);
+      box-shadow: var(--shadow-sm);
+    }
 
-      .journeys {
-        grid-template-columns: 1fr;
+    #legend span {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    .dot.your-route {
+      background: #2563eb;
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2);
+    }
+
+    .dot.their-route {
+      background: #f43f5e;
+      box-shadow: 0 0 0 3px rgba(244, 63, 94, 0.2);
+    }
+
+    .dot.shared-route {
+      background: #059669;
+      height: 6px;
+      width: 20px;
+      border-radius: 3px;
+      box-shadow: 0 0 0 2px rgba(5, 150, 105, 0.2);
+    }
+
+    .dot.meeting-pin {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+    }
+
+    .dot.nearby-pin {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+    }
+
+    /* RESULTS SECTION */
+    #results {
+      display: none;
+      margin-top: 32px;
+    }
+
+    .results-card {
+      background: var(--surface-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-xl);
+      padding: 28px;
+      box-shadow: var(--shadow-md);
+      margin-bottom: 24px;
+    }
+
+    .results-heading {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--text-main);
+      margin-bottom: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .results-heading-badge {
+      font-size: 13px;
+      font-weight: 600;
+      background: #eff6ff;
+      color: var(--primary-blue);
+      padding: 4px 12px;
+      border-radius: 12px;
+    }
+
+    /* MATCH CARD */
+    .match-card {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: var(--radius-lg);
+      padding: 22px;
+      margin-top: 16px;
+      transition: all 0.2s ease;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .match-card:hover {
+      border-color: #cbd5e1;
+      box-shadow: var(--shadow-md);
+    }
+
+    .match-card.active-match {
+      border-color: var(--primary-blue);
+      background: #f8fafc;
+      box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.18);
+    }
+
+    .match-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+
+    .match-user {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .avatar {
+      width: 44px;
+      height: 44px;
+      background: #eff6ff;
+      color: var(--primary-blue);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 17px;
+    }
+
+    .match-name {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text-main);
+    }
+
+    .match-score-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      border-radius: 20px;
+      background: #eff6ff;
+      color: #1d4ed8;
+      font-size: 14px;
+      font-weight: 700;
+      border: 1px solid #bfdbfe;
+    }
+
+    .route-path {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 15.5px;
+      color: #1e293b;
+      font-weight: 600;
+      margin-bottom: 14px;
+    }
+
+    .route-arrow {
+      color: var(--primary-blue);
+      font-size: 16px;
+    }
+
+    .match-meta-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 10px;
+      padding-top: 12px;
+      border-top: 1px solid #f1f5f9;
+      font-size: 13.5px;
+      color: #475569;
+    }
+
+    .meeting-badge-sm {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: #059669;
+      font-weight: 600;
+      background: #ecfdf5;
+      padding: 4px 10px;
+      border-radius: 8px;
+    }
+
+    .btn-view-route {
+      height: 42px;
+      padding: 0 18px;
+      border: 1px solid var(--border-color);
+      background: #ffffff;
+      color: var(--primary-blue);
+      border-radius: var(--radius-sm);
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .btn-view-route:hover {
+      background: #eff6ff;
+      border-color: #bfdbfe;
+    }
+
+    .show-more-btn {
+      width: 100%;
+      height: 46px;
+      margin-top: 16px;
+      background: #ffffff;
+      border: 1px solid var(--border-color);
+      color: var(--primary-blue);
+      border-radius: var(--radius-md);
+      font-size: 14.5px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .show-more-btn:hover {
+      background: #f8fafc;
+      border-color: #cbd5e1;
+    }
+
+    /* EMPTY STATE */
+    .empty-card {
+      background: #ffffff;
+      border: 1px dashed #cbd5e1;
+      border-radius: var(--radius-lg);
+      padding: 36px 24px;
+      text-align: center;
+    }
+
+    .empty-icon {
+      width: 52px;
+      height: 52px;
+      background: #f1f5f9;
+      color: #64748b;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 16px;
+    }
+
+    .empty-title {
+      font-size: 19px;
+      font-weight: 700;
+      color: var(--text-main);
+      margin-bottom: 8px;
+    }
+
+    .empty-text {
+      font-size: 14.5px;
+      color: var(--text-muted);
+      max-width: 480px;
+      margin: 0 auto;
+      line-height: 1.5;
+    }
+
+    /* CUSTOM MAP MARKERS & PINS */
+    .marker-pin-custom {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .pin-label-badge {
+      background: #ffffff;
+      color: #0f172a;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 4px;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+      white-space: nowrap;
+      margin-left: 6px;
+    }
+
+    /* MEETING PIN CUSTOM */
+    .meeting-pin-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      position: relative;
+    }
+
+    .meeting-pin-bubble {
+      width: 32px;
+      height: 32px;
+      background: #059669;
+      border: 3px solid #ffffff;
+      border-radius: 50% 50% 50% 0;
+      transform: rotate(-45deg);
+      box-shadow: 0 4px 14px rgba(5, 150, 105, 0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .meeting-pin-dot {
+      width: 10px;
+      height: 10px;
+      background: #ffffff;
+      border-radius: 50%;
+    }
+
+    .meeting-pin-label {
+      background: #059669;
+      color: #ffffff;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+      white-space: nowrap;
+      margin-top: 4px;
+      border: 1px solid #ffffff;
+    }
+
+    /* FOOTER */
+    .footer {
+      text-align: center;
+      margin-top: 60px;
+      font-size: 13px;
+      color: var(--text-light);
+    }
+
+    /* RESPONSIVE DESIGN */
+    @media (max-width: 640px) {
+      .container {
+        padding: 24px 16px 60px;
       }
 
-      .people {
-        grid-template-columns: 1fr;
+      .hero-title {
+        font-size: 32px;
+      }
+
+      .hero-subtitle {
+        font-size: 16px;
+      }
+
+      .search-card {
+        padding: 22px 18px;
       }
 
       .actions {
         flex-direction: column;
       }
 
-      #map {
-        height: 420px;
+      #clear {
+        width: 100%;
       }
 
-    }
+      #map {
+        height: 380px;
+      }
 
+      .match-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+      }
+
+      .btn-view-route {
+        width: 100%;
+      }
+    }
   </style>
 </head>
 
 <body>
 
-<div class="container">
+  <!-- NAVBAR HEADER -->
+  <header class="navbar">
+    <div class="nav-container">
+      <a href="#" class="brand">
+        <div class="brand-logo">
+          <svg viewBox="0 0 24 24">
+            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
+            <circle cx="12" cy="9" r="2.5"/>
+          </svg>
+        </div>
+        <span class="brand-name">GoTogether</span>
+      </a>
+      <span class="brand-badge">Journey Matcher</span>
+    </div>
+  </header>
 
-  <div class="header">
+  <!-- MAIN CONTENT CONTAINER -->
+  <main class="container">
 
-    <div class="logo">
-      GoTogetherRides
+    <!-- HERO SECTION -->
+    <section class="hero">
+      <h1 class="hero-title">Share the way.</h1>
+      <p class="hero-subtitle">Find people travelling in the same direction.</p>
+    </section>
+
+    <!-- JOURNEY SEARCH CARD -->
+    <section class="search-card">
+      <div class="card-header">
+        <h2 class="card-title">Your Journey Details</h2>
+        <p class="card-subtitle">Enter your starting point and destination to find compatible travelers.</p>
+      </div>
+
+      <div class="form-grid">
+
+        <!-- NAME FIELD -->
+        <div class="field">
+          <label class="field-label" for="name">Your Name</label>
+          <div class="input-wrapper">
+            <div class="input-icon">
+              <svg viewBox="0 0 24 24">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                <circle cx="12" cy="7" r="4"/>
+              </svg>
+            </div>
+            <input
+              id="name"
+              type="text"
+              placeholder="Enter your name"
+              autocomplete="off"
+            >
+          </div>
+        </div>
+
+        <!-- PICKUP FIELD -->
+        <div class="field">
+          <label class="field-label" for="pickup">Pickup Location</label>
+          <div class="input-wrapper">
+            <div class="input-icon">
+              <svg viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M12 2v3m0 14v3M2 12h3m14 0h3"/>
+              </svg>
+            </div>
+            <input
+              id="pickup"
+              type="text"
+              placeholder="Search pickup area or landmark..."
+              autocomplete="off"
+            >
+          </div>
+          <div id="pickupSuggestions" class="suggestions"></div>
+        </div>
+
+        <!-- DROP FIELD -->
+        <div class="field">
+          <label class="field-label" for="drop">Destination</label>
+          <div class="input-wrapper">
+            <div class="input-icon">
+              <svg viewBox="0 0 24 24">
+                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+                <circle cx="12" cy="10" r="3"/>
+              </svg>
+            </div>
+            <input
+              id="drop"
+              type="text"
+              placeholder="Search destination area..."
+              autocomplete="off"
+            >
+          </div>
+          <div id="dropSuggestions" class="suggestions"></div>
+        </div>
+
+        <!-- ACTION BUTTONS -->
+        <div class="actions">
+          <button id="find">
+            <span>Find people going my way</span>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+              <polyline points="12 5 19 12 12 19"></polyline>
+            </svg>
+          </button>
+
+          <button id="clear">
+            Clear
+          </button>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- STATUS / LOADING STATE -->
+    <div id="status"></div>
+
+    <!-- WHY THIS MATCHED PANEL -->
+    <div id="whyMatchedPanel" class="why-matched-card">
+      <div class="why-header">
+        <div class="why-score-badge">
+          <span id="whyScore" class="why-score-num">--%</span>
+          <span>Route Match</span>
+        </div>
+        <div class="why-metrics">
+          <span id="whyOverlap">--%</span> route overlap &bull; <span id="whyAlign">--</span> direction alignment
+        </div>
+      </div>
+      <div class="why-explanation" id="whyText">
+        Your journeys share a significant part of the same route.
+      </div>
     </div>
 
-    <div class="subtitle">
-      Find someone heading your way.
+    <!-- MAP DISPLAY -->
+    <div id="map"></div>
+
+    <!-- MAP LEGEND -->
+    <div id="legend">
+      <span>
+        <i class="dot your-route"></i>
+        Your route
+      </span>
+      <span>
+        <i class="dot their-route"></i>
+        Their route
+      </span>
+      <span>
+        <i class="dot shared-route"></i>
+        Shared route
+      </span>
+      <span>
+        <span class="dot meeting-pin">📍</span>
+        Suggested meeting point
+      </span>
+      <span>
+        <span class="dot nearby-pin">👤</span>
+        Journeys near your route
+      </span>
     </div>
 
-  </div>
-
-
-  <div class="journeys">
-
-    <div class="journey-card">
-
-      <div class="journey-title">
-        👋 Your journey
-      </div>
-
-      <div class="field">
-
-        <label>
-          Your name
-        </label>
-
-        <input
-          id="aName"
-          type="text"
-          placeholder="What should we call you?"
-        >
-
-      </div>
-
-
-      <div class="field">
-
-        <label>
-          Where are you starting?
-        </label>
-
-        <input
-          id="aPickup"
-          type="text"
-          placeholder="Start typing a place..."
-          autocomplete="off"
-        >
-
-        <div
-          id="aPickupSuggestions"
-          class="suggestions"
-        ></div>
-
-      </div>
-
-
-      <div class="field">
-
-        <label>
-          Where are you going?
-        </label>
-
-        <input
-          id="aDrop"
-          type="text"
-          placeholder="Start typing a place..."
-          autocomplete="off"
-        >
-
-        <div
-          id="aDropSuggestions"
-          class="suggestions"
-        ></div>
-
-      </div>
-
-    </div>
-
-
-    <div class="journey-card">
-
-      <div class="journey-title">
-        👋 Their journey
-      </div>
-
-      <div class="field">
-
-        <label>
-          Their name
-        </label>
-
-        <input
-          id="bName"
-          type="text"
-          placeholder="What should we call them?"
-        >
-
-      </div>
-
-
-      <div class="field">
-
-        <label>
-          Where are they starting?
-        </label>
-
-        <input
-          id="bPickup"
-          type="text"
-          placeholder="Start typing a place..."
-          autocomplete="off"
-        >
-
-        <div
-          id="bPickupSuggestions"
-          class="suggestions"
-        ></div>
-
-      </div>
-
-
-      <div class="field">
-
-        <label>
-          Where are they going?
-        </label>
-
-        <input
-          id="bDrop"
-          type="text"
-          placeholder="Start typing a place..."
-          autocomplete="off"
-        >
-
-        <div
-          id="bDropSuggestions"
-          class="suggestions"
-        ></div>
-
-      </div>
-
-    </div>
-
-  </div>
-
-
-  <div class="actions">
-
-    <button id="go">
-      FIND MY MATCH
-    </button>
-
-    <button id="retry">
-      TRY ANOTHER JOURNEY
-    </button>
-
-    <button id="clear">
-      CLEAR
-    </button>
-
-  </div>
-
-
-  <div id="status"></div>
-
-  <div id="result"></div>
-
-  <div id="map"></div>
-
-</div>
-
-
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
-
-<script>
-
-const map = L.map("map").setView(
-  [17.385, 78.4867],
-  11
-);
-
-
-L.tileLayer(
-  "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-  {
-    attribution:
-      "&copy; OpenStreetMap contributors"
-  }
-).addTo(map);
-
-
-let routeLayers = [];
-
-
-function value(id) {
-
-  return String(
-    document.getElementById(id).value || ""
-  ).trim();
-
-}
-
-
-function clearMap() {
-
-  routeLayers.forEach(layer => {
-
-    map.removeLayer(layer);
-
-  });
-
-  routeLayers = [];
-
-}
-
-
-function setupSuggestions(inputId, boxId) {
-
-  const input =
-    document.getElementById(inputId);
-
-  const box =
-    document.getElementById(boxId);
-
-  let timer = null;
-
-
-  input.addEventListener(
-    "input",
-    function() {
-
-      clearTimeout(timer);
-
-      const text =
-        input.value.trim();
-
-
-      if (text.length < 2) {
-
-        box.style.display = "none";
-        box.innerHTML = "";
-
-        return;
+    <!-- RESULTS SECTION -->
+    <section id="results"></section>
+
+    <!-- FOOTER -->
+    <footer class="footer">
+      <p>GoTogether Route Matcher MVP &bull; Smart journey sharing</p>
+    </footer>
+
+  </main>
+
+  <!-- Leaflet & MarkerCluster JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+
+  <script>
+
+    /*
+    ==================================================
+    MAP INITIALIZATION
+    ==================================================
+    */
+
+    const map = L.map("map").setView(
+      [17.385, 78.4867],
+      11
+    );
+
+    L.tileLayer(
+      "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+      {
+        attribution: "&copy; OpenStreetMap contributors"
+      }
+    ).addTo(map);
+
+    let mapLayers = [];
+    let currentMatches = [];
+    let activeJourneysData = [];
+    let nearbyClusterGroup = null;
+
+
+    /*
+    ==================================================
+    HELPERS & LOCATION CLEANING
+    ==================================================
+    */
+
+    function value(id) {
+      return String(
+        document.getElementById(id).value || ""
+      ).trim();
+    }
+
+    function escapeHtml(text) {
+      return String(text || "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function formatCleanName(rawName) {
+      if (!rawName) return "Location";
+
+      const parts = String(rawName)
+        .split(",")
+        .map(p => p.trim())
+        .filter(p => {
+          if (!p) return false;
+          if (/^\?+$/.test(p)) return false;
+          if (/^\d+$/.test(p)) return false;
+          if (/^(India|Telangana|Greater Hyderabad|Municipal Corporation|Ward \d+|East Zone|West Zone|North Zone|South Zone)$/i.test(p)) return false;
+          if (/mandal/i.test(p)) return false;
+          return true;
+        });
+
+      if (!parts.length) {
+        return String(rawName).split(",")[0] || "Location";
       }
 
+      return parts.slice(0, 2).join(", ");
+    }
 
-      timer = setTimeout(
-        async function() {
+    function cleanLocationName(place) {
+      const address = place.address || {};
 
+      const preferred =
+        address.suburb ||
+        address.neighbourhood ||
+        address.city_district ||
+        address.town ||
+        address.city ||
+        address.village ||
+        address.municipality;
+
+      if (preferred) {
+        return preferred;
+      }
+
+      return formatCleanName(place.display_name);
+    }
+
+
+    /*
+    ==================================================
+    CLEAR MAP & PANELS
+    ==================================================
+    */
+
+    function clearMap() {
+      mapLayers.forEach(layer => {
+        try {
+          map.removeLayer(layer);
+        } catch (e) {
+          console.error(e);
+        }
+      });
+
+      mapLayers = [];
+
+      document.getElementById("whyMatchedPanel").style.display = "none";
+    }
+
+
+    /*
+    ==================================================
+    LOCATION AUTOCOMPLETE SUGGESTIONS
+    ==================================================
+    */
+
+    function setupSuggestions(inputId, boxId) {
+      const input = document.getElementById(inputId);
+      const box = document.getElementById(boxId);
+      let timer = null;
+
+      input.addEventListener("input", function() {
+        clearTimeout(timer);
+        const text = input.value.trim();
+
+        if (text.length < 2) {
+          box.style.display = "none";
+          box.innerHTML = "";
+          return;
+        }
+
+        timer = setTimeout(async function() {
           try {
-
             const url =
               "https://nominatim.openstreetmap.org/search" +
               "?format=jsonv2" +
               "&limit=5" +
               "&countrycodes=in" +
+              "&accept-language=en" +
+              "&addressdetails=1" +
               "&q=" +
               encodeURIComponent(text);
 
+            const response = await fetch(url);
+            if (!response.ok) return;
 
-            const response =
-              await fetch(url, {
-                headers: {
-                  "Accept":
-                    "application/json"
-                }
-              });
-
-
-            const places =
-              await response.json();
-
-
+            const places = await response.json();
             box.innerHTML = "";
 
-
             if (!places.length) {
-
               box.style.display = "none";
-
               return;
             }
 
+            places.forEach(function(place) {
+              const item = document.createElement("div");
+              item.className = "suggestion";
 
-            places.forEach(
-              function(place) {
+              const main = cleanLocationName(place);
+              const parts = String(place.display_name || "")
+                .split(",")
+                .map(x => x.trim())
+                .filter(Boolean);
 
-                const item =
-                  document.createElement("div");
+              const sub = parts.slice(1, 3).join(", ");
 
-                item.className =
-                  "suggestion";
+              item.innerHTML =
+                '<div class="suggestion-main">' +
+                escapeHtml(main) +
+                "</div>" +
+                (sub
+                  ? '<div class="suggestion-sub">' + escapeHtml(sub) + "</div>"
+                  : "");
 
+              item.addEventListener("click", function() {
+                input.value = main;
+                box.style.display = "none";
+                box.innerHTML = "";
+              });
 
-                const parts =
-                  place.display_name
-                    .split(",");
-
-
-                const main =
-                  parts
-                    .slice(0, 2)
-                    .join(",")
-                    .trim();
-
-
-                const sub =
-                  parts
-                    .slice(2)
-                    .join(",")
-                    .trim();
-
-
-                item.innerHTML = `
-
-                  <div class="suggestion-main">
-                    📍 ${main}
-                  </div>
-
-                  ${
-                    sub
-                      ? `<div class="suggestion-sub">${sub}</div>`
-                      : ""
-                  }
-
-                `;
-
-
-                item.addEventListener(
-                  "click",
-                  function() {
-
-                    input.value =
-                      place.display_name;
-
-                    box.style.display =
-                      "none";
-
-                    box.innerHTML = "";
-
-                  }
-                );
-
-
-                box.appendChild(item);
-
-              }
-            );
-
+              box.appendChild(item);
+            });
 
             box.style.display = "block";
 
-
           } catch (error) {
-
-            console.error(
-              "Suggestion error:",
-              error
-            );
-
+            console.error("Suggestion error:", error);
           }
+        }, 450);
+      });
 
-        },
-        450
-      );
-
+      document.addEventListener("click", function(event) {
+        if (!input.contains(event.target) && !box.contains(event.target)) {
+          box.style.display = "none";
+        }
+      });
     }
-  );
+
+    setupSuggestions("pickup", "pickupSuggestions");
+    setupSuggestions("drop", "dropSuggestions");
 
 
-  document.addEventListener(
-    "click",
-    function(event) {
+    /*
+    ==================================================
+    CORRIDOR GEOMETRY CALCULATIONS
+    ==================================================
+    */
 
-      if (
-        !input.contains(event.target) &&
-        !box.contains(event.target)
-      ) {
+    function pointSegDistGeo(p, a, b) {
+      const lat0 = p[1] * Math.PI / 180;
+      const kx = 111320 * Math.cos(lat0);
+      const ky = 110540;
 
-        box.style.display =
-          "none";
+      const px = p[0] * kx, py = p[1] * ky;
+      const ax = a[0] * kx, ay = a[1] * ky;
+      const bx = b[0] * kx, by = b[1] * ky;
 
+      const dx = bx - ax, dy = by - ay;
+      const len2 = dx * dx + dy * dy;
+
+      let t = len2 ? ((px - ax) * dx + (py - ay) * dy) / len2 : 0;
+      t = Math.max(0, Math.min(1, t));
+
+      return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+    }
+
+    function minRouteDistGeo(p, line) {
+      let best = Infinity;
+      for (let i = 1; i < line.length; i++) {
+        best = Math.min(best, pointSegDistGeo(p, line[i - 1], line[i]));
+      }
+      return best;
+    }
+
+    function extractSharedSegments(lineA, lineB, thresholdMeters = 1000) {
+      const sharedSegments = [];
+      let currentSegment = [];
+
+      for (let i = 0; i < lineA.length; i++) {
+        const pt = lineA[i];
+        const dist = minRouteDistGeo(pt, lineB);
+        if (dist <= thresholdMeters) {
+          currentSegment.push([pt[1], pt[0]]);
+        } else {
+          if (currentSegment.length > 1) {
+            sharedSegments.push(currentSegment);
+          }
+          currentSegment = [];
+        }
+      }
+      if (currentSegment.length > 1) {
+        sharedSegments.push(currentSegment);
+      }
+      return sharedSegments;
+    }
+
+
+    /*
+    ==================================================
+    LOAD & RENDER NEARBY JOURNEYS (RAPIDO-LIKE CLUSTERS)
+    ==================================================
+    */
+
+    async function loadNearbyJourneys() {
+      try {
+        const response = await fetch("/api/journeys");
+        if (!response.ok) return;
+
+        const data = await response.json();
+        activeJourneysData = data.journeys || [];
+
+        renderNearbyJourneys(activeJourneysData);
+      } catch (err) {
+        console.error("Failed to load nearby journeys:", err);
+      }
+    }
+
+    function renderNearbyJourneys(journeys) {
+      if (nearbyClusterGroup) {
+        map.removeLayer(nearbyClusterGroup);
       }
 
+      nearbyClusterGroup = L.markerClusterGroup({
+        showCoverageOnHover: false,
+        zoomToBoundsOnClick: true,
+        iconCreateFunction: function(cluster) {
+          const count = cluster.getChildCount();
+          return L.divIcon({
+            html: '<div style="background:#2563eb;color:#fff;font-weight:700;border-radius:50%;width:36px;height:36px;display:flex;align-items:center;justify-content:center;border:3px solid #fff;box-shadow:0 3px 10px rgba(37,99,235,0.4);font-size:13px;">' + count + '</div>',
+            className: 'cluster-marker-custom',
+            iconSize: [36, 36]
+          });
+        }
+      });
+
+      journeys.forEach(function(journey) {
+        if (!journey.pickup_lat || !journey.pickup_lon) return;
+
+        const personName = (journey.profiles && journey.profiles.name)
+          ? journey.profiles.name
+          : "Traveler";
+
+        const cleanPickup = formatCleanName(journey.pickup_name);
+        const cleanDrop = formatCleanName(journey.drop_name);
+
+        const icon = L.divIcon({
+          className: 'custom-nearby-icon',
+          html: `<div style="
+            width: 28px;
+            height: 28px;
+            background: #ffffff;
+            border: 2px solid #2563eb;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 8px rgba(15, 23, 42, 0.2);
+            font-size: 14px;
+          ">👤</div>`,
+          iconSize: [28, 28],
+          iconAnchor: [14, 14]
+        });
+
+        const marker = L.marker([journey.pickup_lat, journey.pickup_lon], { icon: icon });
+
+        const popupContent =
+          '<div style="padding: 4px; font-family: inherit;">' +
+            '<div style="font-weight: 700; font-size: 15px; margin-bottom: 4px; color: #0f172a;">' + escapeHtml(personName) + '</div>' +
+            '<div style="font-size: 13px; color: #475569; margin-bottom: 8px;">' + escapeHtml(cleanPickup) + ' &rarr; ' + escapeHtml(cleanDrop) + '</div>' +
+            '<div style="font-size: 11px; color: #64748b; font-weight: 600;">Journey near your route</div>' +
+          '</div>';
+
+        marker.bindPopup(popupContent);
+        nearbyClusterGroup.addLayer(marker);
+      });
+
+      map.addLayer(nearbyClusterGroup);
     }
-  );
 
-}
+    loadNearbyJourneys();
 
 
-setupSuggestions(
-  "aPickup",
-  "aPickupSuggestions"
-);
+    /*
+    ==================================================
+    DRAW MATCH ON MAP (DISTINCTION & ELEVATED MEETING PIN)
+    ==================================================
+    */
 
-setupSuggestions(
-  "aDrop",
-  "aDropSuggestions"
-);
+    function drawMatch(matchData, meetingData) {
+      clearMap();
 
-setupSuggestions(
-  "bPickup",
-  "bPickupSuggestions"
-);
+      const coordsA = matchData.routeA.coordinates;
+      const coordsB = matchData.routeB.coordinates;
 
-setupSuggestions(
-  "bDrop",
-  "bDropSuggestions"
-);
-
-
-function showResult(data, names) {
-
-  const result =
-    document.getElementById("result");
-
-
-  result.style.display =
-    "block";
-
-
-  const yourName =
-    names.a ||
-    "You";
-
-
-  const theirName =
-    names.b ||
-    "The other person";
-
-
-  if (data.matched) {
-
-    result.innerHTML = `
-
-      <div class="result-box">
-
-        <div class="result-heading match-title">
-
-          <span class="green-dot"></span>
-
-          ${yourName} & ${theirName}
-          could travel together
-
-        </div>
-
-
-        <div class="people">
-
-          <div class="person-box">
-
-            <div class="person-name">
-              👤 ${yourName}
-            </div>
-
-            <div class="person-route">
-              ${data.a.pickup.name}
-              →
-              ${data.a.drop.name}
-            </div>
-
-          </div>
-
-
-          <div class="person-box">
-
-            <div class="person-name">
-              👤 ${theirName}
-            </div>
-
-            <div class="person-route">
-              ${data.b.pickup.name}
-              →
-              ${data.b.drop.name}
-            </div>
-
-          </div>
-
-        </div>
-
-
-        <div class="message">
-
-          🛣️ <strong>
-            You're both heading in a similar direction.
-          </strong>
-
-          <br>
-
-          A good part of your journeys follows
-          the same way.
-
-        </div>
-
-
-        <div class="simple-points">
-
-          <div class="simple-point">
-            🚗 Your journeys look compatible.
-          </div>
-
-          <div class="simple-point">
-            📍 Your starting areas are reasonably close.
-          </div>
-
-          <div class="simple-point">
-            🛣️ Your routes share part of the same road network.
-          </div>
-
-        </div>
-
-      </div>
-
-    `;
-
-  } else {
-
-    result.innerHTML = `
-
-      <div class="result-box">
-
-        <div class="result-heading no-match-title">
-
-          <span class="red-dot"></span>
-
-          These two journeys don't line up
-
-        </div>
-
-
-        <div class="people">
-
-          <div class="person-box">
-
-            <div class="person-name">
-              👤 ${yourName}
-            </div>
-
-            <div class="person-route">
-              ${data.a.pickup.name}
-              →
-              ${data.a.drop.name}
-            </div>
-
-          </div>
-
-
-          <div class="person-box">
-
-            <div class="person-name">
-              👤 ${theirName}
-            </div>
-
-            <div class="person-route">
-              ${data.b.pickup.name}
-              →
-              ${data.b.drop.name}
-            </div>
-
-          </div>
-
-        </div>
-
-
-        <div class="no-match-message">
-
-          🛣️ These journeys don't appear to follow
-          the same route, so sharing this trip may
-          not be practical.
-
-        </div>
-
-      </div>
-
-    `;
-
-  }
-
-}
-
-
-function drawRoutes(data) {
-
-  clearMap();
-
-  // 🔵 Person A — BLUE
-  const routeA =
-    L.geoJSON(
-      data.routeA,
-      {
+      // 1. User Route Line (Solid Blue)
+      const routeA = L.geoJSON(matchData.routeA, {
         style: {
           color: "#2563eb",
-          weight: 6,
-          opacity: 0.9,
+          weight: 5,
+          opacity: 0.85,
           lineCap: "round",
           lineJoin: "round"
         }
-      }
-    ).addTo(map);
+      }).addTo(map);
 
-
-  // 🟢 Person B — GREEN
-  const routeB =
-    L.geoJSON(
-      data.routeB,
-      {
+      // 2. Candidate Route Line (Coral Red Dashed)
+      const routeB = L.geoJSON(matchData.routeB, {
         style: {
-          color: "#16a34a",
-          weight: 6,
-          opacity: 0.9,
+          color: "#f43f5e",
+          weight: 5,
+          opacity: 0.85,
+          dashArray: "6, 8",
           lineCap: "round",
           lineJoin: "round"
         }
+      }).addTo(map);
+
+      mapLayers.push(routeA, routeB);
+
+      // 3. Highlighted Shared Route Corridor (Emerald Green)
+      const sharedSegments = extractSharedSegments(coordsA, coordsB, 1000);
+      sharedSegments.forEach(segment => {
+        const sharedPolyline = L.polyline(segment, {
+          color: "#059669",
+          weight: 9,
+          opacity: 0.9,
+          lineCap: "round",
+          lineJoin: "round"
+        }).addTo(map);
+        mapLayers.push(sharedPolyline);
+      });
+
+      // 4. Start & Destination Markers with Distinct Icons
+      const userStartIcon = L.divIcon({
+        className: 'marker-pin-custom',
+        html: `<div style="background:#2563eb;width:16px;height:16px;border-radius:50%;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.3);"></div>`,
+        iconSize: [16, 16],
+        iconAnchor: [8, 8]
+      });
+
+      const userEndIcon = L.divIcon({
+        className: 'marker-pin-custom',
+        html: `<div style="background:#1e40af;width:18px;height:18px;border-radius:4px;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;color:#fff;font-size:10px;font-weight:700;">🏁</div>`,
+        iconSize: [18, 18],
+        iconAnchor: [9, 9]
+      });
+
+      const candidateStartIcon = L.divIcon({
+        className: 'marker-pin-custom',
+        html: `<div style="background:#f43f5e;width:16px;height:16px;border-radius:50%;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.3);"></div>`,
+        iconSize: [16, 16],
+        iconAnchor: [8, 8]
+      });
+
+      const candidateEndIcon = L.divIcon({
+        className: 'marker-pin-custom',
+        html: `<div style="background:#be123c;width:18px;height:18px;border-radius:4px;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;color:#fff;font-size:10px;font-weight:700;">🎯</div>`,
+        iconSize: [18, 18],
+        iconAnchor: [9, 9]
+      });
+
+      const aPickup = L.marker([matchData.a.pickup.lat, matchData.a.pickup.lon], { icon: userStartIcon })
+        .bindTooltip("You start", { permanent: false, direction: "top" }).addTo(map);
+
+      const aDrop = L.marker([matchData.a.drop.lat, matchData.a.drop.lon], { icon: userEndIcon })
+        .bindTooltip("You end", { permanent: false, direction: "top" }).addTo(map);
+
+      const bPickup = L.marker([matchData.b.pickup.lat, matchData.b.pickup.lon], { icon: candidateStartIcon })
+        .bindTooltip("They start", { permanent: false, direction: "top" }).addTo(map);
+
+      const bDrop = L.marker([matchData.b.drop.lat, matchData.b.drop.lon], { icon: candidateEndIcon })
+        .bindTooltip("They end", { permanent: false, direction: "top" }).addTo(map);
+
+      mapLayers.push(aPickup, aDrop, bPickup, bDrop);
+
+      // 5. Visually Prominent Meeting Point Pin (Elevated zIndexOffset: 1000)
+      if (meetingData && meetingData.found && meetingData.meetingPoint) {
+        const point = meetingData.meetingPoint;
+
+        const pinIcon = L.divIcon({
+          className: 'custom-meeting-pin-wrapper',
+          html: `<div class="meeting-pin-container">
+            <div class="meeting-pin-bubble">
+              <div class="meeting-pin-dot"></div>
+            </div>
+            <div class="meeting-pin-label">Meet here</div>
+          </div>`,
+          iconSize: [70, 50],
+          iconAnchor: [35, 32],
+          popupAnchor: [0, -32]
+        });
+
+        const meetingMarker = L.marker([point.lat, point.lon], {
+          icon: pinIcon,
+          zIndexOffset: 1000
+        })
+        .bindTooltip("Suggested meeting point")
+        .bindPopup("<strong>Suggested meeting point</strong><br>Both journeys pass through this area.")
+        .addTo(map);
+
+        mapLayers.push(meetingMarker);
       }
-    ).addTo(map);
 
+      // 6. Update "Why this matched" Panel
+      const score = matchData.routeMatchPercent || 0;
+      const overlap = matchData.routeOverlapPercent || 0;
+      const align = matchData.directionAlignmentPercent || 0;
 
-  // 🔵 Person A pickup
-  const aPickup =
-    L.circleMarker(
-      [
-        data.a.pickup.lat,
-        data.a.pickup.lon
-      ],
-      {
-        radius: 8,
-        color: "#ffffff",
-        weight: 3,
-        fillColor: "#2563eb",
-        fillOpacity: 1
+      let alignLabel = "Aligned direction";
+      if (align >= 75) {
+        alignLabel = "Strong direction alignment";
+      } else if (align >= 50) {
+        alignLabel = "Good direction alignment";
       }
-    )
-    .bindTooltip(
-      "Person A • Start"
-    )
-    .addTo(map);
 
+      document.getElementById("whyScore").textContent = score + "%";
+      document.getElementById("whyOverlap").textContent = overlap + "%";
+      document.getElementById("whyAlign").textContent = alignLabel;
+      document.getElementById("whyText").textContent =
+        "Your journeys share a significant part of the same route (" + overlap + "% route overlap with " + alignLabel.toLowerCase() + ").";
+      document.getElementById("whyMatchedPanel").style.display = "block";
 
-  // 🔵 Person A destination
-  const aDrop =
-    L.circleMarker(
-      [
-        data.a.drop.lat,
-        data.a.drop.lon
-      ],
-      {
-        radius: 8,
-        color: "#ffffff",
-        weight: 3,
-        fillColor: "#2563eb",
-        fillOpacity: 1
-      }
-    )
-    .bindTooltip(
-      "Person A • Destination"
-    )
-    .addTo(map);
+      // 7. Automatic Fit Bounds
+      const bounds = L.featureGroup(mapLayers).getBounds();
+      map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
 
-
-  // 🟢 Person B pickup
-  const bPickup =
-    L.circleMarker(
-      [
-        data.b.pickup.lat,
-        data.b.pickup.lon
-      ],
-      {
-        radius: 8,
-        color: "#ffffff",
-        weight: 3,
-        fillColor: "#16a34a",
-        fillOpacity: 1
-      }
-    )
-    .bindTooltip(
-      "Person B • Start"
-    )
-    .addTo(map);
-
-
-  // 🟢 Person B destination
-  const bDrop =
-    L.circleMarker(
-      [
-        data.b.drop.lat,
-        data.b.drop.lon
-      ],
-      {
-        radius: 8,
-        color: "#ffffff",
-        weight: 3,
-        fillColor: "#16a34a",
-        fillOpacity: 1
-      }
-    )
-    .bindTooltip(
-      "Person B • Destination"
-    )
-    .addTo(map);
-
-
-  routeLayers.push(
-    routeA,
-    routeB,
-    aPickup,
-    aDrop,
-    bPickup,
-    bDrop
-  );
-
-
-  const bounds =
-    L.featureGroup([
-      routeA,
-      routeB,
-      aPickup,
-      aDrop,
-      bPickup,
-      bDrop
-    ]).getBounds();
-
-
-  map.fitBounds(
-    bounds,
-    {
-      padding: [30, 30]
+      setTimeout(function() {
+        map.invalidateSize();
+      }, 100);
     }
-  );
-
-}
 
 
-async function findMatch() {
+    /*
+    ==================================================
+    SELECT & DISPLAY SPECIFIC MATCH ROUTE
+    ==================================================
+    */
 
-  const aName =
-    value("aName");
+    function selectMatch(index) {
+      if (!currentMatches[index]) return;
 
-  const bName =
-    value("bName");
+      const selectedMatch = currentMatches[index];
 
-  const aPickup =
-    value("aPickup");
-
-  const aDrop =
-    value("aDrop");
-
-  const bPickup =
-    value("bPickup");
-
-  const bDrop =
-    value("bDrop");
-
-
-  if (
-    !aName ||
-    !bName ||
-    !aPickup ||
-    !aDrop ||
-    !bPickup ||
-    !bDrop
-  ) {
-
-    document.getElementById("status")
-      .textContent =
-      "Please enter both names and all four locations.";
-
-    return;
-  }
-
-
-  document.getElementById("status")
-    .textContent =
-    "Finding a possible match...";
-
-
-  document.getElementById("result")
-    .style.display =
-    "none";
-
-
-  document.getElementById("go")
-    .style.display =
-    "none";
-
-
-  document.getElementById("clear")
-    .style.display =
-    "none";
-
-
-  document.getElementById("retry")
-    .style.display =
-    "none";
-
-
-  try {
-
-    const response =
-      await fetch(
-        "/api/match",
-        {
-          method: "POST",
-
-          headers: {
-            "Content-Type":
-              "application/json"
-          },
-
-          body: JSON.stringify({
-
-            aPickup,
-            aDrop,
-            bPickup,
-            bDrop
-
-          })
-
+      // Highlight active match card
+      const cards = document.querySelectorAll(".match-card");
+      cards.forEach((card, idx) => {
+        if (idx === index) {
+          card.classList.add("active-match");
+        } else {
+          card.classList.remove("active-match");
         }
-      );
+      });
 
+      const meetingData = selectedMatch.data.meetingData || selectedMatch.meetingData;
 
-    const data =
-      await response.json();
+      drawMatch(selectedMatch.data, meetingData);
 
-
-    if (!response.ok) {
-
-      throw new Error(
-        data.error ||
-        "Something went wrong."
-      );
-
+      // Smooth scroll to map
+      document.getElementById("map").scrollIntoView({ behavior: "smooth", block: "nearest" });
     }
 
 
-    document.getElementById("status")
-      .textContent = "";
+    /*
+    ==================================================
+    SHOW MATCHES SECTION (TOP MATCHES & PAGINATION)
+    ==================================================
+    */
 
+    let showAllMatchesState = false;
 
-    showResult(
-      data,
-      {
-        a: aName,
-        b: bName
+    function showMatches(matches) {
+      currentMatches = matches;
+      const results = document.getElementById("results");
+      results.style.display = "block";
+
+      if (!matches.length) {
+        results.innerHTML =
+          '<div class="results-card">' +
+            '<div class="empty-card">' +
+              '<div class="empty-icon">' +
+                '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+                  '<circle cx="12" cy="12" r="10"></circle>' +
+                  '<line x1="12" y1="8" x2="12" y2="12"></line>' +
+                  '<line x1="12" y1="16" x2="12.01" y2="16"></line>' +
+                '</svg>' +
+              '</div>' +
+              '<div class="empty-title">No one going your way yet</div>' +
+              '<div class="empty-text">' +
+                'Your journey has been saved. We\'ll show compatible journeys when someone else travels a similar route.' +
+              '</div>' +
+            '</div>' +
+          '</div>';
+        return;
       }
-    );
 
+      // Sort matches descending by routeMatchPercent
+      matches.sort((a, b) => (b.data.routeMatchPercent || 0) - (a.data.routeMatchPercent || 0));
 
-    drawRoutes(data);
-
-
-    document.getElementById("retry")
-      .style.display =
-      "block";
-
-
-  } catch (error) {
-
-    console.error(error);
-
-
-    document.getElementById("status")
-      .textContent =
-      error.message;
-
-
-    document.getElementById("go")
-      .style.display =
-      "block";
-
-
-    document.getElementById("clear")
-      .style.display =
-      "block";
-
-  }
-
-}
-
-
-function resetJourney() {
-
-  [
-    "aName",
-    "bName",
-    "aPickup",
-    "aDrop",
-    "bPickup",
-    "bDrop"
-  ].forEach(
-    function(id) {
-
-      document.getElementById(id)
-        .value = "";
-
+      renderMatchCards();
     }
-  );
+
+    function renderMatchCards() {
+      const results = document.getElementById("results");
+      const matches = currentMatches;
+
+      const limit = showAllMatchesState ? matches.length : Math.min(3, matches.length);
+      let cardsHtml = "";
+
+      for (let idx = 0; idx < limit; idx++) {
+        const match = matches[idx];
+        const initialLetter = escapeHtml(match.name.charAt(0).toUpperCase() || "S");
+
+        const cleanPickup = formatCleanName(match.pickup);
+        const cleanDrop = formatCleanName(match.drop);
+
+        const score = match.data.routeMatchPercent || 0;
+        const overlap = match.data.routeOverlapPercent || 0;
+        const align = match.data.directionAlignmentPercent || 0;
+
+        const hasMeetingPoint = match.meetingData && match.meetingData.found;
+
+        let alignLabel = "Aligned direction";
+        if (align >= 75) {
+          alignLabel = "Strong direction alignment";
+        } else if (align >= 50) {
+          alignLabel = "Good direction alignment";
+        }
+
+        cardsHtml +=
+          '<div class="match-card ' + (idx === 0 ? 'active-match' : '') + '">' +
+            '<div class="match-header">' +
+              '<div class="match-user">' +
+                '<div class="avatar">' + initialLetter + '</div>' +
+                '<div class="match-name">' + escapeHtml(match.name) + '</div>' +
+              '</div>' +
+              '<div class="match-score-pill">' + score + '% Route match</div>' +
+            '</div>' +
+
+            '<div class="route-path">' +
+              '<span>' + escapeHtml(cleanPickup) + '</span>' +
+              '<span class="route-arrow">&rarr;</span>' +
+              '<span>' + escapeHtml(cleanDrop) + '</span>' +
+            '</div>' +
+
+            '<div class="match-meta-row">' +
+              '<div>' +
+                '<span><strong>' + overlap + '%</strong> route overlap</span> &bull; <span>' + escapeHtml(alignLabel) + '</span>' +
+              '</div>' +
+              (hasMeetingPoint ? '<div class="meeting-badge-sm">📍 Meeting point available</div>' : '') +
+              '<button class="btn-view-route" onclick="selectMatch(' + idx + ')">View journey</button>' +
+            '</div>' +
+          '</div>';
+      }
+
+      let showMoreBtnHtml = "";
+      if (matches.length > 3) {
+        showMoreBtnHtml =
+          '<button class="show-more-btn" onclick="toggleShowMoreMatches()">' +
+            (showAllMatchesState
+              ? 'Show top 3 matches'
+              : 'Show all ' + matches.length + ' matches') +
+          '</button>';
+      }
+
+      results.innerHTML =
+        '<div class="results-card">' +
+          '<div class="results-heading">' +
+            '<span>Top route matches</span>' +
+            '<span class="results-heading-badge">' + matches.length + ' journeys going your way</span>' +
+          '</div>' +
+          cardsHtml +
+          showMoreBtnHtml +
+        '</div>';
+    }
+
+    function toggleShowMoreMatches() {
+      showAllMatchesState = !showAllMatchesState;
+      renderMatchCards();
+    }
 
 
-  document.getElementById("result")
-    .style.display =
-    "none";
+    /*
+    ==================================================
+    FIND PEOPLE GOING MY WAY
+    ==================================================
+    */
+
+    async function findPeople() {
+      const name = value("name");
+      const pickup = value("pickup");
+      const drop = value("drop");
+
+      const status = document.getElementById("status");
+      const findButton = document.getElementById("find");
+      const results = document.getElementById("results");
+
+      if (!name || !pickup || !drop) {
+        status.innerHTML = '<span>Please enter your name, pickup, and destination.</span>';
+        return;
+      }
+
+      findButton.disabled = true;
+      findButton.innerHTML = '<span>Finding journeys...</span>';
+
+      status.innerHTML = '<div class="status-spinner"></div><span>Finding journeys going your way...</span>';
+
+      results.style.display = "none";
+      clearMap();
+
+      try {
+        // 1. SAVE USER JOURNEY
+        const saveResponse = await fetch("/api/journeys", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, pickup, drop })
+        });
+
+        const saved = await saveResponse.json();
+
+        if (!saveResponse.ok) {
+          throw new Error(saved.error || "Could not save your journey.");
+        }
+
+        // 2. LOAD ACTIVE JOURNEYS
+        status.innerHTML = '<div class="status-spinner"></div><span>Comparing routes...</span>';
+
+        const journeysResponse = await fetch("/api/journeys");
+        const journeysData = await journeysResponse.json();
+
+        if (!journeysResponse.ok) {
+          throw new Error(journeysData.error || "Could not load journeys.");
+        }
+
+        // 3. FILTER OUT OWN JOURNEY
+        const candidates = (journeysData.journeys || [])
+          .filter(j => j.id !== saved.journey.id);
+
+        // Update nearby journey markers
+        renderNearbyJourneys(candidates);
+
+        // 4. MATCH CANDIDATES
+        const matches = [];
+
+        for (let i = 0; i < candidates.length; i++) {
+          const candidate = candidates[i];
+          const candidateName = (candidate.profiles && candidate.profiles.name)
+            ? candidate.profiles.name
+            : "Someone";
+
+          status.innerHTML =
+            '<div class="status-spinner"></div>' +
+            '<span>Checking journey ' + (i + 1) + ' of ' + candidates.length + '...</span>';
+
+          try {
+            const matchResponse = await fetch("/api/match", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                aPickup: pickup,
+                aDrop: drop,
+                aPickupLat: saved.journey.pickup.lat,
+                aPickupLon: saved.journey.pickup.lon,
+                aDropLat: saved.journey.drop.lat,
+                aDropLon: saved.journey.drop.lon,
+
+                bPickup: candidate.pickup_name,
+                bDrop: candidate.drop_name,
+                bPickupLat: candidate.pickup_lat,
+                bPickupLon: candidate.pickup_lon,
+                bDropLat: candidate.drop_lat,
+                bDropLon: candidate.drop_lon
+              })
+            });
+
+            const matchData = await matchResponse.json();
+
+            if (matchResponse.ok && matchData.matched) {
+              matches.push({
+                name: candidateName,
+                pickup: candidate.pickup_name,
+                drop: candidate.drop_name,
+                data: matchData,
+                meetingData: matchData.meetingData,
+                journey: candidate
+              });
+            }
+          } catch (error) {
+            console.error("Candidate matching error:", error);
+          }
+        }
+
+        // 5. RENDER RESULTS
+        showMatches(matches);
+
+        // 6. DRAW FIRST MATCH IF AVAILABLE
+        if (matches.length) {
+          selectMatch(0);
+          status.innerHTML = '';
+        } else {
+          status.innerHTML = '';
+        }
+
+      } catch (error) {
+        console.error(error);
+        status.innerHTML = '<span>' + escapeHtml(error.message || "Something went wrong.") + '</span>';
+      } finally {
+        findButton.disabled = false;
+        findButton.innerHTML =
+          '<span>Find people going my way</span>' +
+          '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+            '<line x1="5" y1="12" x2="19" y2="12"></line>' +
+            '<polyline points="12 5 19 12 12 19"></polyline>' +
+          '</svg>';
+      }
+    }
 
 
-  document.getElementById("status")
-    .textContent =
-    "";
+    /*
+    ==================================================
+    CLEAR ALL FIELDS & RESET STATE
+    ==================================================
+    */
+
+    function clearAll() {
+      document.getElementById("name").value = "";
+      document.getElementById("pickup").value = "";
+      document.getElementById("drop").value = "";
+
+      document.getElementById("status").innerHTML = "";
+
+      const results = document.getElementById("results");
+      results.style.display = "none";
+      results.innerHTML = "";
+
+      currentMatches = [];
+      showAllMatchesState = false;
+      clearMap();
+
+      map.setView([17.385, 78.4867], 11);
+      loadNearbyJourneys();
+    }
 
 
-  document.getElementById("go")
-    .style.display =
-    "block";
+    /*
+    ==================================================
+    EVENT LISTENERS
+    ==================================================
+    */
 
+    document.getElementById("find").addEventListener("click", findPeople);
+    document.getElementById("clear").addEventListener("click", clearAll);
 
-  document.getElementById("clear")
-    .style.display =
-    "block";
-
-
-  document.getElementById("retry")
-    .style.display =
-    "none";
-
-
-  clearMap();
-
-
-  map.setView(
-    [17.385, 78.4867],
-    11
-  );
-
-}
-
-
-document.getElementById("go")
-  .addEventListener(
-    "click",
-    findMatch
-  );
-
-
-document.getElementById("retry")
-  .addEventListener(
-    "click",
-    resetJourney
-  );
-
-
-document.getElementById("clear")
-  .addEventListener(
-    "click",
-    resetJourney
-  );
-
-</script>
+  </script>
 
 </body>
 </html>

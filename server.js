@@ -1,33 +1,66 @@
 const express = require("express");
 const path = require("path");
 
+try {
+  process.loadEnvFile(".env");
+} catch (e) {
+  // Ignored in Vercel/production environments where environment variables are injected natively
+}
+
+const supabase = require("./lib/supabase");
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
-const sleep = ms => new Promise(r => setTimeout(r, ms));
+const sleep = ms =>
+  new Promise(resolve => setTimeout(resolve, ms));
+
+
+/*
+==================================================
+GEOCODING
+==================================================
+*/
 
 async function geocode(query) {
+
   const url =
-    "https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=in&q=" +
+    "https://nominatim.openstreetmap.org/search" +
+    "?format=jsonv2" +
+    "&limit=1" +
+    "&countrycodes=in" +
+    "&q=" +
     encodeURIComponent(query);
 
-  const r = await fetch(url, {
-    headers: {
-      "User-Agent": "GoTogetherRouteMatcherMVP/0.1 (prototype)"
-    }
-  });
+  const response =
+    await fetch(
+      url,
+      {
+        headers: {
+          "User-Agent":
+            "GoTogetherRouteMatcherMVP/0.1 (prototype)"
+        }
+      }
+    );
 
-  if (!r.ok) {
-    throw new Error("Geocoding failed: " + r.status);
+  if (!response.ok) {
+    throw new Error(
+      "Geocoding failed: " +
+      response.status
+    );
   }
 
-  const data = await r.json();
+  const data =
+    await response.json();
 
   if (!data.length) {
-    throw new Error("Location not found: " + query);
+    throw new Error(
+      "Location not found: " +
+      query
+    );
   }
 
   return {
@@ -37,319 +70,1264 @@ async function geocode(query) {
   };
 }
 
+
+/*
+==================================================
+OSRM ROUTING
+==================================================
+*/
+
 async function osrmRoute(a, b) {
+
   const url =
     `https://router.project-osrm.org/route/v1/driving/` +
     `${a.lon},${a.lat};${b.lon},${b.lat}` +
     `?overview=full&geometries=geojson&steps=false`;
 
-  const r = await fetch(url);
+  const response =
+    await fetch(url);
 
-  if (!r.ok) {
-    throw new Error("Routing failed: " + r.status);
+  if (!response.ok) {
+    throw new Error(
+      "Routing failed: " +
+      response.status
+    );
   }
 
-  const data = await r.json();
+  const data =
+    await response.json();
 
   if (
     data.code !== "Ok" ||
     !data.routes ||
     !data.routes.length
   ) {
-    throw new Error("No driving route found.");
+    throw new Error(
+      "No driving route found."
+    );
   }
 
   return data.routes[0];
 }
 
+
+/*
+==================================================
+GEOMETRY HELPERS
+==================================================
+*/
+
 function rad(x) {
   return x * Math.PI / 180;
 }
 
+
 function bearing(a, b) {
+
   const p1 = rad(a[1]);
   const p2 = rad(b[1]);
-  const dl = rad(b[0] - a[0]);
+
+  const dl =
+    rad(
+      b[0] - a[0]
+    );
 
   const y =
-    Math.sin(dl) * Math.cos(p2);
+    Math.sin(dl) *
+    Math.cos(p2);
 
   const x =
-    Math.cos(p1) * Math.sin(p2) -
+    Math.cos(p1) *
+    Math.sin(p2) -
     Math.sin(p1) *
     Math.cos(p2) *
     Math.cos(dl);
 
   return (
-    Math.atan2(y, x) * 180 / Math.PI + 360
+    Math.atan2(y, x) *
+    180 /
+    Math.PI +
+    360
   ) % 360;
 }
 
+
 function angleDiff(a, b) {
-  const d = Math.abs(a - b) % 360;
-  return d > 180 ? 360 - d : d;
+
+  const d =
+    Math.abs(a - b) % 360;
+
+  return d > 180
+    ? 360 - d
+    : d;
 }
 
+
 function pointSegDist(p, a, b) {
-  const lat0 = rad(p[1]);
 
-  const kx = 111320 * Math.cos(lat0);
-  const ky = 110540;
+  const lat0 =
+    rad(p[1]);
 
-  const px = p[0] * kx;
-  const py = p[1] * ky;
+  const kx =
+    111320 *
+    Math.cos(lat0);
 
-  const ax = a[0] * kx;
-  const ay = a[1] * ky;
+  const ky =
+    110540;
 
-  const bx = b[0] * kx;
-  const by = b[1] * ky;
+  const px =
+    p[0] * kx;
 
-  const dx = bx - ax;
-  const dy = by - ay;
+  const py =
+    p[1] * ky;
 
-  const len2 = dx * dx + dy * dy;
+  const ax =
+    a[0] * kx;
 
-  let t = len2
-    ? ((px - ax) * dx + (py - ay) * dy) / len2
-    : 0;
+  const ay =
+    a[1] * ky;
 
-  t = Math.max(0, Math.min(1, t));
+  const bx =
+    b[0] * kx;
+
+  const by =
+    b[1] * ky;
+
+  const dx =
+    bx - ax;
+
+  const dy =
+    by - ay;
+
+  const len2 =
+    dx * dx +
+    dy * dy;
+
+  let t =
+    len2
+      ? (
+          (px - ax) * dx +
+          (py - ay) * dy
+        ) / len2
+      : 0;
+
+  t =
+    Math.max(
+      0,
+      Math.min(1, t)
+    );
 
   return Math.hypot(
-    px - (ax + t * dx),
-    py - (ay + t * dy)
+    px -
+      (ax + t * dx),
+
+    py -
+      (ay + t * dy)
   );
 }
 
-function minRouteDistance(p, line) {
-  let best = Infinity;
 
-  for (let i = 1; i < line.length; i++) {
-    best = Math.min(
-      best,
-      pointSegDist(
-        p,
-        line[i - 1],
-        line[i]
-      )
-    );
+function minRouteDistance(
+  p,
+  line
+) {
+
+  let best =
+    Infinity;
+
+  for (
+    let i = 1;
+    i < line.length;
+    i++
+  ) {
+
+    best =
+      Math.min(
+        best,
+
+        pointSegDist(
+          p,
+          line[i - 1],
+          line[i]
+        )
+      );
+
   }
 
   return best;
 }
 
-function sample(line, n = 100) {
-  if (line.length <= n) {
+
+function sample(
+  line,
+  n = 100
+) {
+
+  if (
+    line.length <= n
+  ) {
     return line;
   }
 
   const out = [];
 
-  for (let i = 0; i < n; i++) {
+  for (
+    let i = 0;
+    i < n;
+    i++
+  ) {
+
     out.push(
       line[
         Math.round(
-          i * (line.length - 1) / (n - 1)
+          i *
+          (line.length - 1) /
+          (n - 1)
         )
       ]
     );
+
   }
 
   return out;
 }
+
 
 function corridorShare(
   lineA,
   lineB,
   threshold = 1000
 ) {
-  const s = sample(lineA, 100);
+
+  const samples =
+    sample(
+      lineA,
+      100
+    );
 
   let near = 0;
 
-  for (const p of s) {
+  for (
+    const point of samples
+  ) {
+
     if (
-      minRouteDistance(p, lineB) <= threshold
+      minRouteDistance(
+        point,
+        lineB
+      ) <= threshold
     ) {
+
       near++;
+
     }
+
   }
 
-  return near / s.length;
+  return (
+    near /
+    samples.length
+  );
 }
 
-app.post("/api/match", async (req, res) => {
 
-  try {
+/*
+==================================================
+MEETING POINT HELPER
+==================================================
+*/
 
-    const {
-      aPickup,
-      aDrop,
-      bPickup,
-      bDrop
-    } = req.body || {};
+function findMeetingPoint(
+  lineA,
+  lineB,
+  threshold = 1000
+) {
+
+  const samplesA =
+    sample(
+      lineA,
+      200
+    );
+
+  const samplesB =
+    sample(
+      lineB,
+      200
+    );
+
+  const candidates = [];
+
+
+  for (
+    const pointA of samplesA
+  ) {
+
+    const distanceToB =
+      minRouteDistance(
+        pointA,
+        lineB
+      );
 
     if (
-      ![aPickup, aDrop, bPickup, bDrop]
-        .every(
-          x =>
-            typeof x === "string" &&
-            x.trim()
-        )
+      distanceToB <= threshold
     ) {
-      return res.status(400).json({
-        error: "Please provide all four locations."
+
+      candidates.push({
+        point: pointA,
+        distance:
+          distanceToB
       });
+
     }
 
-    console.log("Matching journeys:");
-    console.log("A:", aPickup, "→", aDrop);
-    console.log("B:", bPickup, "→", bDrop);
+  }
 
-    const aPickupGeo =
-      await geocode(aPickup);
 
-    await sleep(1100);
+  for (
+    const pointB of samplesB
+  ) {
 
-    const aDropGeo =
-      await geocode(aDrop);
-
-    await sleep(1100);
-
-    const bPickupGeo =
-      await geocode(bPickup);
-
-    await sleep(1100);
-
-    const bDropGeo =
-      await geocode(bDrop);
-
-    const [routeA, routeB] =
-      await Promise.all([
-        osrmRoute(
-          aPickupGeo,
-          aDropGeo
-        ),
-        osrmRoute(
-          bPickupGeo,
-          bDropGeo
-        )
-      ]);
-
-    const lineA =
-      routeA.geometry.coordinates;
-
-    const lineB =
-      routeB.geometry.coordinates;
-
-    const shareAB =
-      corridorShare(
-        lineA,
-        lineB,
-        1000
+    const distanceToA =
+      minRouteDistance(
+        pointB,
+        lineA
       );
 
-    const shareBA =
-      corridorShare(
-        lineB,
-        lineA,
-        1000
-      );
+    if (
+      distanceToA <= threshold
+    ) {
 
-    const dirA =
-      bearing(
-        lineA[0],
-        lineA[lineA.length - 1]
-      );
+      candidates.push({
+        point: pointB,
+        distance:
+          distanceToA
+      });
 
-    const dirB =
-      bearing(
-        lineB[0],
-        lineB[lineB.length - 1]
-      );
+    }
 
-    const directionDifference =
-      angleDiff(dirA, dirB);
+  }
 
-    // CURRENT V0 MATCHING RULE
-    const directionOK =
-      directionDifference <= 55;
 
-    const corridorOK =
-      shareAB >= 0.25 ||
-      shareBA >= 0.25 ||
-      (
-        shareAB >= 0.20 &&
-        shareBA >= 0.20
-      );
+  if (
+    !candidates.length
+  ) {
 
-    const matched =
-      directionOK && corridorOK;
+    return null;
 
-    res.json({
+  }
 
-      matched,
 
-      thresholdMeters: 1000,
+  candidates.sort(
+    (a, b) =>
+      a.distance -
+      b.distance
+  );
 
-      directionDifference,
 
-      shareAB,
+  const best =
+    candidates[0];
 
-      shareBA,
 
-      a: {
-        pickup: {
-          lat: aPickupGeo.lat,
-          lon: aPickupGeo.lon,
-          name: aPickup
-        },
-        drop: {
-          lat: aDropGeo.lat,
-          lon: aDropGeo.lon,
-          name: aDrop
-        }
-      },
+  return {
 
-      b: {
-        pickup: {
-          lat: bPickupGeo.lat,
-          lon: bPickupGeo.lon,
-          name: bPickup
-        },
-        drop: {
-          lat: bDropGeo.lat,
-          lon: bDropGeo.lon,
-          name: bDrop
-        }
-      },
+    lon:
+      best.point[0],
 
-      routeA: routeA.geometry,
+    lat:
+      best.point[1],
 
-      routeB: routeB.geometry,
+    distanceToOtherRouteMeters:
+      Math.round(
+        best.distance
+      )
 
-      rules: {
-        directionMaxDegrees: 55,
-        minOneWayShare: 0.25,
-        twoWayShare: 0.20
+  };
+
+}
+
+
+/*
+==================================================
+1. CREATE JOURNEY (POST /api/journeys)
+==================================================
+*/
+
+app.post(
+  "/api/journeys",
+  async (req, res) => {
+
+    try {
+
+      const {
+        name,
+        pickup,
+        drop
+      } = req.body || {};
+
+
+      if (
+        !name ||
+        !pickup ||
+        !drop
+      ) {
+
+        return res
+          .status(400)
+          .json({
+            error:
+              "Name, pickup and drop are required."
+          });
+
       }
 
-    });
 
-  } catch (e) {
+      /*
+      ------------------------------------------
+      GEOCODE USER JOURNEY
+      ------------------------------------------
+      */
 
-    console.error(e);
+      const pickupGeo =
+        await geocode(
+          pickup
+        );
 
-    res.status(500).json({
-      error:
-        e.message ||
-        "Matching failed."
-    });
+      await sleep(
+        1100
+      );
+
+
+      const dropGeo =
+        await geocode(
+          drop
+        );
+
+
+      /*
+      ------------------------------------------
+      CREATE PROFILE
+      ------------------------------------------
+      */
+
+      const {
+        data: profile,
+        error:
+          profileError
+      } =
+        await supabase
+          .from("profiles")
+          .insert({
+            name
+          })
+          .select()
+          .single();
+
+
+      if (
+        profileError
+      ) {
+
+        throw profileError;
+
+      }
+
+
+      /*
+      ------------------------------------------
+      CREATE JOURNEY
+      ------------------------------------------
+      */
+
+      const {
+        data: journey,
+        error:
+          journeyError
+      } =
+        await supabase
+          .from("journeys")
+          .insert({
+
+            user_id:
+              profile.id,
+
+            pickup_name:
+              pickup,
+
+            pickup_lat:
+              pickupGeo.lat,
+
+            pickup_lon:
+              pickupGeo.lon,
+
+            drop_name:
+              drop,
+
+            drop_lat:
+              dropGeo.lat,
+
+            drop_lon:
+              dropGeo.lon,
+
+            status:
+              "active"
+
+          })
+          .select()
+          .single();
+
+
+      if (
+        journeyError
+      ) {
+
+        throw journeyError;
+
+      }
+
+
+      res.json({
+
+        success: true,
+
+        profile,
+
+        journey: {
+
+          id:
+            journey.id,
+
+          user_id:
+            journey.user_id,
+
+          pickup: {
+
+            name:
+              journey.pickup_name,
+
+            lat:
+              journey.pickup_lat,
+
+            lon:
+              journey.pickup_lon
+
+          },
+
+          drop: {
+
+            name:
+              journey.drop_name,
+
+            lat:
+              journey.drop_lat,
+
+            lon:
+              journey.drop_lon
+
+          },
+
+          status:
+            journey.status
+
+        }
+
+      });
+
+    } catch (error) {
+
+      console.error(
+        "Journey creation error:",
+        error
+      );
+
+      res
+        .status(500)
+        .json({
+
+          error:
+            error.message ||
+            "Could not save your journey."
+
+        });
+
+    }
+
   }
-});
+);
 
-app.get("/{*splat}", (req, res) => {
+
+/*
+==================================================
+2. LOAD ACTIVE JOURNEYS (GET /api/journeys)
+==================================================
+*/
+
+app.get(
+  "/api/journeys",
+  async (req, res) => {
+
+    try {
+
+      const {
+        data,
+        error
+      } =
+        await supabase
+          .from("journeys")
+          .select(`
+            id,
+            user_id,
+            pickup_name,
+            pickup_lat,
+            pickup_lon,
+            drop_name,
+            drop_lat,
+            drop_lon,
+            status,
+            created_at,
+            profiles (
+              id,
+              name
+            )
+          `)
+          .eq(
+            "status",
+            "active"
+          )
+          .order(
+            "created_at",
+            {
+              ascending: false
+            }
+          );
+
+
+      if (
+        error
+      ) {
+
+        throw error;
+
+      }
+
+
+      res.json({
+
+        success: true,
+
+        journeys:
+          data || []
+
+      });
+
+    } catch (error) {
+
+      console.error(
+        "Load journeys error:",
+        error
+      );
+
+      res
+        .status(500)
+        .json({
+
+          error:
+            error.message ||
+            "Could not load journeys."
+
+        });
+
+    }
+
+  }
+);
+
+
+/*
+==================================================
+3. MATCH JOURNEYS (POST /api/match)
+==================================================
+*/
+
+app.post(
+  "/api/match",
+  async (req, res) => {
+
+    try {
+
+      const {
+
+        aPickup,
+        aDrop,
+
+        bPickup,
+        bDrop,
+
+        aPickupLat,
+        aPickupLon,
+
+        aDropLat,
+        aDropLon,
+
+        bPickupLat,
+        bPickupLon,
+
+        bDropLat,
+        bDropLon
+
+      } =
+        req.body || {};
+
+
+      /*
+      ------------------------------------------
+      RESOLVE GEOMETRY / COORDINATES
+      ------------------------------------------
+      */
+
+      let aPickupGeo, aDropGeo, bPickupGeo, bDropGeo;
+
+      const coordinatesProvided =
+        [
+          aPickupLat,
+          aPickupLon,
+
+          aDropLat,
+          aDropLon,
+
+          bPickupLat,
+          bPickupLon,
+
+          bDropLat,
+          bDropLon
+        ].every(val => typeof val === "number" || (typeof val === "string" && val !== ""));
+
+      if (coordinatesProvided) {
+
+        aPickupGeo = { lat: Number(aPickupLat), lon: Number(aPickupLon) };
+        aDropGeo = { lat: Number(aDropLat), lon: Number(aDropLon) };
+        bPickupGeo = { lat: Number(bPickupLat), lon: Number(bPickupLon) };
+        bDropGeo = { lat: Number(bDropLat), lon: Number(bDropLon) };
+
+      } else {
+
+        if (
+          ![
+            aPickup,
+            aDrop,
+            bPickup,
+            bDrop
+          ].every(
+            value =>
+              typeof value === "string" &&
+              value.trim()
+          )
+        ) {
+
+          return res
+            .status(400)
+            .json({
+              error:
+                "Please provide all four locations or coordinates."
+            });
+
+        }
+
+        aPickupGeo = await geocode(aPickup);
+        await sleep(1100);
+        aDropGeo = await geocode(aDrop);
+        await sleep(1100);
+        bPickupGeo = await geocode(bPickup);
+        await sleep(1100);
+        bDropGeo = await geocode(bDrop);
+
+      }
+
+
+      /*
+      ------------------------------------------
+      CALCULATE OSRM DRIVING ROUTES
+      ------------------------------------------
+      */
+
+      const [
+        routeA,
+        routeB
+      ] =
+        await Promise.all([
+
+          osrmRoute(
+            aPickupGeo,
+            aDropGeo
+          ),
+
+          osrmRoute(
+            bPickupGeo,
+            bDropGeo
+          )
+
+        ]);
+
+
+      const lineA =
+        routeA
+          .geometry
+          .coordinates;
+
+
+      const lineB =
+        routeB
+          .geometry
+          .coordinates;
+
+
+      /*
+      ------------------------------------------
+      CORRIDOR SHARING
+      ------------------------------------------
+      */
+
+      const shareAB =
+        corridorShare(
+          lineA,
+          lineB,
+          1000
+        );
+
+
+      const shareBA =
+        corridorShare(
+          lineB,
+          lineA,
+          1000
+        );
+
+
+      /*
+      ------------------------------------------
+      DIRECTION
+      ------------------------------------------
+      */
+
+      const dirA =
+        bearing(
+          lineA[0],
+          lineA[
+            lineA.length - 1
+          ]
+        );
+
+
+      const dirB =
+        bearing(
+          lineB[0],
+          lineB[
+            lineB.length - 1
+          ]
+        );
+
+
+      const directionDifference =
+        angleDiff(
+          dirA,
+          dirB
+        );
+
+
+      /*
+      ------------------------------------------
+      MATCHING ELIGIBILITY RULES (UNTOUCHED)
+      ------------------------------------------
+      */
+
+      const directionOK =
+        directionDifference <= 55;
+
+
+      const corridorOK =
+        shareAB >= 0.25 ||
+        shareBA >= 0.25 ||
+        (
+          shareAB >= 0.20 &&
+          shareBA >= 0.20
+        );
+
+
+      const matched =
+        directionOK &&
+        corridorOK;
+
+
+      /*
+      ------------------------------------------
+      EXPLANATORY ROUTE MATCH % CALCULATION
+      ------------------------------------------
+      */
+
+      const routeOverlap =
+        Math.max(shareAB, shareBA) * 100;
+
+      const directionAlignment =
+        Math.max(
+          0,
+          Math.min(
+            100,
+            (1 - directionDifference / 55) * 100
+          )
+        );
+
+      const routeMatchScore =
+        (routeOverlap * 0.60) +
+        (directionAlignment * 0.40);
+
+      const routeMatchPercent = Math.round(routeMatchScore);
+      const routeOverlapPercent = Math.round(routeOverlap);
+      const directionAlignmentPercent = Math.round(directionAlignment);
+
+
+      /*
+      ------------------------------------------
+      MEETING POINT CALCULATION (ZERO DUPLICATE GEOCODING)
+      ------------------------------------------
+      */
+
+      const meetingPoint =
+        findMeetingPoint(
+          lineA,
+          lineB,
+          1000
+        );
+
+      const meetingData =
+        meetingPoint
+          ? { found: true, meetingPoint }
+          : { found: false, meetingPoint: null };
+
+
+      /*
+      ------------------------------------------
+      RESPONSE
+      ------------------------------------------
+      */
+
+      res.json({
+
+        matched,
+
+        thresholdMeters:
+          1000,
+
+        directionDifference,
+
+        shareAB,
+
+        shareBA,
+
+        routeOverlapPercent,
+
+        directionAlignmentPercent,
+
+        routeMatchPercent,
+
+        meetingData,
+
+        a: {
+
+          pickup: {
+
+            lat:
+              aPickupGeo.lat,
+
+            lon:
+              aPickupGeo.lon,
+
+            name:
+              aPickup
+
+          },
+
+          drop: {
+
+            lat:
+              aDropGeo.lat,
+
+            lon:
+              aDropGeo.lon,
+
+            name:
+              aDrop
+
+          }
+
+        },
+
+        b: {
+
+          pickup: {
+
+            lat:
+              bPickupGeo.lat,
+
+            lon:
+              bPickupGeo.lon,
+
+            name:
+              bPickup
+
+          },
+
+          drop: {
+
+            lat:
+              bDropGeo.lat,
+
+            lon:
+              bDropGeo.lon,
+
+            name:
+              bDrop
+
+          }
+
+        },
+
+        routeA:
+          routeA.geometry,
+
+        routeB:
+          routeB.geometry,
+
+        rules: {
+
+          directionMaxDegrees:
+            55,
+
+          minOneWayShare:
+            0.25,
+
+          twoWayShare:
+            0.20
+
+        }
+
+      });
+
+    } catch (error) {
+
+      console.error(
+        "Matching error:",
+        error
+      );
+
+      res
+        .status(500)
+        .json({
+
+          error:
+            error.message ||
+            "Matching failed."
+
+        });
+
+    }
+
+  }
+);
+
+
+/*
+==================================================
+4. MEETING POINT (POST /api/meeting-point)
+==================================================
+*/
+
+app.post(
+  "/api/meeting-point",
+  async (req, res) => {
+
+    try {
+
+      const {
+
+        aPickup,
+        aDrop,
+
+        bPickup,
+        bDrop,
+
+        aPickupLat,
+        aPickupLon,
+
+        aDropLat,
+        aDropLon,
+
+        bPickupLat,
+        bPickupLon,
+
+        bDropLat,
+        bDropLon
+
+      } =
+        req.body || {};
+
+
+      let aPickupGeo, aDropGeo, bPickupGeo, bDropGeo;
+
+      const coordinatesProvided =
+        [
+          aPickupLat,
+          aPickupLon,
+
+          aDropLat,
+          aDropLon,
+
+          bPickupLat,
+          bPickupLon,
+
+          bDropLat,
+          bDropLon
+        ].every(val => typeof val === "number" || (typeof val === "string" && val !== ""));
+
+      if (coordinatesProvided) {
+
+        aPickupGeo = { lat: Number(aPickupLat), lon: Number(aPickupLon) };
+        aDropGeo = { lat: Number(aDropLat), lon: Number(aDropLon) };
+        bPickupGeo = { lat: Number(bPickupLat), lon: Number(bPickupLon) };
+        bDropGeo = { lat: Number(bDropLat), lon: Number(bDropLon) };
+
+      } else {
+
+        if (
+          ![
+            aPickup,
+            aDrop,
+            bPickup,
+            bDrop
+          ].every(
+
+            value =>
+              typeof value === "string" &&
+              value.trim()
+
+          )
+        ) {
+
+          return res
+            .status(400)
+            .json({
+
+              error:
+                "Please provide all four locations or coordinates."
+
+            });
+
+        }
+
+        aPickupGeo = await geocode(aPickup);
+        await sleep(1100);
+        aDropGeo = await geocode(aDrop);
+        await sleep(1100);
+        bPickupGeo = await geocode(bPickup);
+        await sleep(1100);
+        bDropGeo = await geocode(bDrop);
+
+      }
+
+
+      const [
+        routeA,
+        routeB
+      ] =
+        await Promise.all([
+
+          osrmRoute(
+            aPickupGeo,
+            aDropGeo
+          ),
+
+          osrmRoute(
+            bPickupGeo,
+            bDropGeo
+          )
+
+        ]);
+
+
+      const lineA =
+        routeA
+          .geometry
+          .coordinates;
+
+
+      const lineB =
+        routeB
+          .geometry
+          .coordinates;
+
+
+      const meetingPoint =
+        findMeetingPoint(
+          lineA,
+          lineB,
+          1000
+        );
+
+
+      if (
+        !meetingPoint
+      ) {
+
+        return res.json({
+
+          found:
+            false,
+
+          meetingPoint:
+            null
+
+        });
+
+      }
+
+
+      res.json({
+
+        found:
+          true,
+
+        meetingPoint
+
+      });
+
+    } catch (error) {
+
+      console.error(
+        "Meeting point error:",
+        error
+      );
+
+      res
+        .status(500)
+        .json({
+
+          error:
+            error.message ||
+            "Could not find meeting point."
+
+        });
+
+    }
+
+  }
+);
+
+
+/*
+==================================================
+5. FRONTEND FALLBACK (ALL UNMATCHED ROUTES)
+==================================================
+*/
+
+app.use((req, res) => {
   res.sendFile(
     path.join(
       __dirname,
@@ -359,11 +1337,24 @@ app.get("/{*splat}", (req, res) => {
   );
 });
 
-app.listen(
-  PORT,
-  () => {
-    console.log(
-      `GoTogether Route Matcher running at http://localhost:${PORT}`
-    );
-  }
-);
+
+/*
+==================================================
+START SERVER
+==================================================
+*/
+
+module.exports = app;
+
+if (!process.env.VERCEL) {
+  app.listen(
+    PORT,
+    () => {
+
+      console.log(
+        `GoTogether Route Matcher running at http://localhost:${PORT}`
+      );
+
+    }
+  );
+}
