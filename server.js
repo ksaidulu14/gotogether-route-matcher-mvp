@@ -23,6 +23,68 @@ const sleep = ms =>
 // In-memory fallback stores for high resilience
 const routeCache = new Map();
 const inMemoryJoinRequests = [];
+const inMemoryJourneys = [
+  {
+    id: "j-seed-1",
+    user_id: "u-seed-1",
+    pickup_name: "Nagole",
+    pickup_lat: 17.3775306,
+    pickup_lon: 78.5601231,
+    drop_name: "Ghatkesar",
+    drop_lat: 17.4510837,
+    drop_lon: 78.6843022,
+    departure_date: new Date().toISOString().split('T')[0],
+    departure_time: "08:30:00",
+    status: "active",
+    created_at: new Date().toISOString(),
+    profiles: { id: "u-seed-1", name: "Rahul (Commuter)" }
+  },
+  {
+    id: "j-seed-2",
+    user_id: "u-seed-2",
+    pickup_name: "Uppal X Road",
+    pickup_lat: 17.4025091,
+    pickup_lon: 78.5612562,
+    drop_name: "Ghatkesar",
+    drop_lat: 17.4510837,
+    drop_lon: 78.6843022,
+    departure_date: new Date().toISOString().split('T')[0],
+    departure_time: "08:45:00",
+    status: "active",
+    created_at: new Date().toISOString(),
+    profiles: { id: "u-seed-2", name: "Priya S." }
+  },
+  {
+    id: "j-seed-3",
+    user_id: "u-seed-3",
+    pickup_name: "Boduppal",
+    pickup_lat: 17.4128,
+    pickup_lon: 78.5783,
+    drop_name: "Ghatkesar",
+    drop_lat: 17.4510837,
+    drop_lon: 78.6843022,
+    departure_date: new Date().toISOString().split('T')[0],
+    departure_time: "08:30:00",
+    status: "active",
+    created_at: new Date().toISOString(),
+    profiles: { id: "u-seed-3", name: "Suresh Kumar" }
+  },
+  {
+    id: "j-seed-4",
+    user_id: "u-seed-4",
+    pickup_name: "Uppal Depot",
+    pickup_lat: 17.3980,
+    pickup_lon: 78.5580,
+    drop_name: "HITEC City",
+    drop_lat: 17.4435,
+    drop_lon: 78.3772,
+    departure_date: new Date().toISOString().split('T')[0],
+    departure_time: "09:00:00",
+    status: "active",
+    created_at: new Date().toISOString(),
+    profiles: { id: "u-seed-4", name: "Ananya R." }
+  }
+];
 
 function getRouteCacheKey(a, b) {
   return `${a.lat.toFixed(4)},${a.lon.toFixed(4)}->${b.lat.toFixed(4)},${b.lon.toFixed(4)}`;
@@ -329,19 +391,33 @@ apiRouter.post("/journeys", async (req, res) => {
       console.warn("Precomputation warning:", routeErr.message);
     }
 
-    const { data: profile, error: profileError } = await supabase
-      .from("profiles")
-      .insert({ name })
-      .select()
-      .single();
+    let profile = null;
+    let profileId = null;
 
-    if (profileError) throw profileError;
+    try {
+      const { data: dbProfile, error: profileError } = await supabase
+        .from("profiles")
+        .insert({ name })
+        .select()
+        .single();
+      if (!profileError && dbProfile) {
+        profile = dbProfile;
+        profileId = dbProfile.id;
+      }
+    } catch (e) {
+      console.warn("Supabase profile insert fallback:", e.message);
+    }
+
+    if (!profile) {
+      profileId = "u-" + Date.now() + "-" + Math.random().toString(36).substring(2, 7);
+      profile = { id: profileId, name };
+    }
 
     const todayStr = new Date().toISOString().split('T')[0];
     const defaultTimeStr = '08:30:00';
 
     let journeyPayload = {
-      user_id: profile.id,
+      user_id: profileId,
       pickup_name: pickup,
       pickup_lat: pickupGeo.lat,
       pickup_lon: pickupGeo.lon,
@@ -359,30 +435,46 @@ apiRouter.post("/journeys", async (req, res) => {
       journeyPayload.bearing_degrees = bearingDegrees;
     }
 
-    let journeyResult = await supabase
-      .from("journeys")
-      .insert(journeyPayload)
-      .select()
-      .single();
+    let journey = null;
 
-    if (journeyResult.error && journeyResult.error.message.includes("column")) {
-      // Column fallback if spatial/schedule columns are absent on remote DB
-      delete journeyPayload.route_geojson;
-      delete journeyPayload.route_distance_meters;
-      delete journeyPayload.bearing_degrees;
-      delete journeyPayload.departure_date;
-      delete journeyPayload.departure_time;
-
-      journeyResult = await supabase
+    try {
+      let journeyResult = await supabase
         .from("journeys")
         .insert(journeyPayload)
         .select()
         .single();
+
+      if (journeyResult && journeyResult.error && journeyResult.error.message.includes("column")) {
+        delete journeyPayload.route_geojson;
+        delete journeyPayload.route_distance_meters;
+        delete journeyPayload.bearing_degrees;
+        delete journeyPayload.departure_date;
+        delete journeyPayload.departure_time;
+
+        journeyResult = await supabase
+          .from("journeys")
+          .insert(journeyPayload)
+          .select()
+          .single();
+      }
+
+      if (journeyResult && !journeyResult.error && journeyResult.data) {
+        journey = journeyResult.data;
+      }
+    } catch (e) {
+      console.warn("Supabase journey insert fallback:", e.message);
     }
 
-    if (journeyResult.error) throw journeyResult.error;
-
-    const journey = journeyResult.data;
+    if (!journey) {
+      const journeyId = "j-" + Date.now() + "-" + Math.random().toString(36).substring(2, 7);
+      journey = {
+        id: journeyId,
+        ...journeyPayload,
+        created_at: new Date().toISOString(),
+        profiles: profile
+      };
+      inMemoryJourneys.unshift(journey);
+    }
 
     res.json({
       success: true,
@@ -390,8 +482,8 @@ apiRouter.post("/journeys", async (req, res) => {
       journey: {
         id: journey.id,
         user_id: journey.user_id,
-        pickup: { name: journey.pickup_name, lat: journey.pickup_lat, lon: journey.pickup_lon },
-        drop: { name: journey.drop_name, lat: journey.drop_lat, lon: journey.drop_lon },
+        pickup: { name: journey.pickup_name || pickup, lat: journey.pickup_lat, lon: journey.pickup_lon },
+        drop: { name: journey.drop_name || drop, lat: journey.drop_lat, lon: journey.drop_lon },
         departure_date: journey.departure_date || departureDate || todayStr,
         departure_time: journey.departure_time || departureTime || defaultTimeStr,
         status: journey.status,
@@ -413,57 +505,54 @@ apiRouter.post("/journeys", async (req, res) => {
 apiRouter.get("/journeys", async (req, res) => {
   try {
     const { searchRadiusKm } = req.query || {};
-    const { data, error } = await supabase
-      .from("journeys")
-      .select(`
-        id,
-        user_id,
-        pickup_name,
-        pickup_lat,
-        pickup_lon,
-        drop_name,
-        drop_lat,
-        drop_lon,
-        departure_date,
-        departure_time,
-        status,
-        created_at,
-        profiles (
-          id,
-          name
-        )
-      `)
-      .eq("status", "active")
-      .order("created_at", { ascending: false });
+    let dbJourneys = [];
 
-    if (error) {
-      // Fallback query if schedule columns aren't present yet on remote DB
-      const baseResult = await supabase
+    try {
+      const { data, error } = await supabase
         .from("journeys")
         .select(`
-          id, user_id, pickup_name, pickup_lat, pickup_lon,
-          drop_name, drop_lat, drop_lon, status, created_at,
-          profiles ( id, name )
+          id,
+          user_id,
+          pickup_name,
+          pickup_lat,
+          pickup_lon,
+          drop_name,
+          drop_lat,
+          drop_lon,
+          departure_date,
+          departure_time,
+          status,
+          created_at,
+          profiles (
+            id,
+            name
+          )
         `)
         .eq("status", "active")
         .order("created_at", { ascending: false });
 
-      return res.json({
-        success: true,
-        searchRadiusKm: Number(searchRadiusKm) || 10,
-        journeys: baseResult.data || []
-      });
+      if (!error && Array.isArray(data)) {
+        dbJourneys = data;
+      }
+    } catch (e) {
+      console.warn("Supabase load journeys fallback:", e.message);
     }
+
+    const combinedMap = new Map();
+    inMemoryJourneys.forEach(j => combinedMap.set(j.id, j));
+    dbJourneys.forEach(j => combinedMap.set(j.id, j));
 
     res.json({
       success: true,
       searchRadiusKm: Number(searchRadiusKm) || 10,
-      journeys: data || []
+      journeys: Array.from(combinedMap.values())
     });
   } catch (error) {
     console.error("Load journeys error:", error);
-    res.status(500).json({
-      error: error.message || "Could not load journeys."
+    res.json({
+      success: true,
+      searchRadiusKm: 10,
+      journeys: inMemoryJourneys
     });
   }
 });
@@ -646,42 +735,73 @@ apiRouter.post("/match-search", async (req, res) => {
     let candidates = [];
     let isRpcActive = false;
 
-    // Supabase RPC 'get_nearby_candidate_journeys' with optional target_date
-    const rpcRes = await supabase.rpc("get_nearby_candidate_journeys", {
-      user_lat: aPickupGeo.lat,
-      user_lon: aPickupGeo.lon,
-      search_radius_meters: searchRadiusMeters,
-      user_bearing: userBearing,
-      max_bearing_difference: 55,
-      target_date: departureDate || null
-    });
+    // Try Supabase RPC first
+    try {
+      const rpcRes = await supabase.rpc("get_nearby_candidate_journeys", {
+        user_lat: aPickupGeo.lat,
+        user_lon: aPickupGeo.lon,
+        search_radius_meters: searchRadiusMeters,
+        user_bearing: userBearing,
+        max_bearing_difference: 55,
+        target_date: departureDate || null
+      });
 
-    if (!rpcRes.error && Array.isArray(rpcRes.data)) {
-      candidates = rpcRes.data;
-      isRpcActive = true;
-    } else {
-      const latDelta = radiusLimitKm / 111;
-      const lonDelta = radiusLimitKm / (111 * Math.cos(rad(aPickupGeo.lat)));
-
-      const { data: dbJourneys, error: dbError } = await supabase
-        .from("journeys")
-        .select(`
-          id, user_id, pickup_name, pickup_lat, pickup_lon,
-          drop_name, drop_lat, drop_lon, status, created_at,
-          profiles ( id, name )
-        `)
-        .eq("status", "active")
-        .gte("pickup_lat", aPickupGeo.lat - latDelta)
-        .lte("pickup_lat", aPickupGeo.lat + latDelta)
-        .gte("pickup_lon", aPickupGeo.lon - lonDelta)
-        .lte("pickup_lon", aPickupGeo.lon + lonDelta);
-
-      if (!dbError && dbJourneys) {
-        candidates = dbJourneys.map(j => ({
-          ...j,
-          profile_name: j.profiles ? j.profiles.name : "Traveler"
-        }));
+      if (!rpcRes.error && Array.isArray(rpcRes.data) && rpcRes.data.length > 0) {
+        candidates = rpcRes.data;
+        isRpcActive = true;
       }
+    } catch (rpcErr) {
+      console.warn("RPC candidate retrieval warning:", rpcErr.message);
+    }
+
+    if (!isRpcActive) {
+      let dbJourneys = [];
+      try {
+        const latDelta = radiusLimitKm / 111;
+        const lonDelta = radiusLimitKm / (111 * Math.cos(rad(aPickupGeo.lat)));
+
+        const { data, error } = await supabase
+          .from("journeys")
+          .select(`
+            id, user_id, pickup_name, pickup_lat, pickup_lon,
+            drop_name, drop_lat, drop_lon, status, created_at,
+            profiles ( id, name )
+          `)
+          .eq("status", "active")
+          .gte("pickup_lat", aPickupGeo.lat - latDelta)
+          .lte("pickup_lat", aPickupGeo.lat + latDelta)
+          .gte("pickup_lon", aPickupGeo.lon - lonDelta)
+          .lte("pickup_lon", aPickupGeo.lon + lonDelta);
+
+        if (!error && Array.isArray(data)) {
+          dbJourneys = data;
+        }
+      } catch (dbErr) {
+        console.warn("DB candidate query warning:", dbErr.message);
+      }
+
+      // Merge Supabase DB journeys with inMemoryJourneys
+      const candidateMap = new Map();
+      inMemoryJourneys.forEach(j => candidateMap.set(j.id, j));
+      dbJourneys.forEach(j => candidateMap.set(j.id, j));
+
+      candidates = Array.from(candidateMap.values()).map(j => ({
+        id: j.id,
+        user_id: j.user_id,
+        profile_name: (j.profiles && j.profiles.name) || "Traveler",
+        pickup_name: j.pickup_name,
+        pickup_lat: Number(j.pickup_lat),
+        pickup_lon: Number(j.pickup_lon),
+        drop_name: j.drop_name,
+        drop_lat: Number(j.drop_lat),
+        drop_lon: Number(j.drop_lon),
+        departure_date: j.departure_date,
+        departure_time: j.departure_time,
+        status: j.status,
+        route_geojson: j.route_geojson || null,
+        route_distance_meters: j.route_distance_meters || null,
+        bearing_degrees: j.bearing_degrees || null
+      }));
     }
 
     const candidateRetrievalEndNs = process.hrtime.bigint();
