@@ -335,6 +335,51 @@ function findMeetingPoint(lineA, lineB, threshold = 1000) {
   };
 }
 
+function calculatePartialRideDetails(lineA, lineB, thresholdMeters = 1000) {
+  const lineACoords = lineA.coordinates || lineA;
+  const lineBCoords = lineB.coordinates || lineB;
+  const sharedIndices = [];
+
+  for (let i = 0; i < lineACoords.length; i++) {
+    const dist = minRouteDistance(lineACoords[i], lineBCoords);
+    if (dist <= thresholdMeters) {
+      sharedIndices.push(i);
+    }
+  }
+
+  if (!sharedIndices.length) {
+    return {
+      hasSharedSection: false,
+      sharedDistanceKm: 0,
+      sharedStartCoord: null,
+      sharedEndCoord: null,
+      sharedLineGeojson: null
+    };
+  }
+
+  const startIdx = sharedIndices[0];
+  const endIdx = sharedIndices[sharedIndices.length - 1];
+  const sharedCoords = lineACoords.slice(startIdx, endIdx + 1);
+
+  let distMeters = 0;
+  for (let i = 1; i < sharedCoords.length; i++) {
+    const p1 = sharedCoords[i - 1];
+    const p2 = sharedCoords[i];
+    distMeters += haversineKm(p1[1], p1[0], p2[1], p2[0]) * 1000;
+  }
+
+  return {
+    hasSharedSection: true,
+    sharedDistanceKm: Math.round((distMeters / 1000) * 10) / 10,
+    sharedStartCoord: { lon: sharedCoords[0][0], lat: sharedCoords[0][1] },
+    sharedEndCoord: { lon: sharedCoords[sharedCoords.length - 1][0], lat: sharedCoords[sharedCoords.length - 1][1] },
+    sharedLineGeojson: {
+      type: "LineString",
+      coordinates: sharedCoords
+    }
+  };
+}
+
 /*
 ==================================================
 HUMAN LOCATION & MEETING POINT HELPERS
@@ -1026,7 +1071,46 @@ apiRouter.post("/match-search", async (req, res) => {
         const corridorOK = shareAB >= 0.25 || shareBA >= 0.25 || (shareAB >= 0.20 && shareBA >= 0.20);
         const matched = directionOK && corridorOK;
 
-        if (matched) {
+        const DESTINATION_THRESHOLD_METERS = 1000;
+        const PICKUP_THRESHOLD_METERS = 1000;
+
+        const dropDistMeters = Math.round(minRouteDistance([aDropGeo.lon, aDropGeo.lat], lineB));
+        const pickupDistMeters = Math.round(minRouteDistance([aPickupGeo.lon, aPickupGeo.lat], lineB));
+
+        const servesDestination = dropDistMeters <= DESTINATION_THRESHOLD_METERS;
+        const connectsPickup = pickupDistMeters <= PICKUP_THRESHOLD_METERS;
+
+        let matchType = "NEARBY";
+        let partialDetails = null;
+
+        if (matched && connectsPickup) {
+          if (servesDestination) {
+            matchType = "FULL";
+          } else {
+            const pInfo = calculatePartialRideDetails(lineA, lineB, 1000);
+            if (pInfo.hasSharedSection && pInfo.sharedDistanceKm >= 1.0) {
+              matchType = "PARTIAL";
+              let dropoffLandmark = null;
+              if (pInfo.sharedEndCoord) {
+                const rawLandmark = await getHumanReadableMeetingPoint(
+                  pInfo.sharedEndCoord.lat,
+                  pInfo.sharedEndCoord.lon,
+                  candidate.drop_name
+                );
+                dropoffLandmark = rawLandmark
+                  .replace(/^Meet near\s*/i, 'Get down near ')
+                  .replace(/^Meet around\s*/i, 'Get down near ');
+              }
+              partialDetails = {
+                sharedDistanceKm: pInfo.sharedDistanceKm,
+                dropoffLandmark,
+                sharedLineGeojson: pInfo.sharedLineGeojson
+              };
+            }
+          }
+        }
+
+        if (matchType === "FULL" || matchType === "PARTIAL") {
           const pickupDistanceKm = haversineKm(
             aPickupGeo.lat, aPickupGeo.lon,
             candidate.pickup_lat, candidate.pickup_lon
@@ -1041,7 +1125,9 @@ apiRouter.post("/match-search", async (req, res) => {
           const directionAlignmentPercent = Math.round(directionAlignment);
 
           const routeALengthKm = (routeA.distance || 0) / 1000;
-          const sharedRouteDistanceKm = Math.round(routeALengthKm * Math.max(shareAB, shareBA) * 10) / 10;
+          const sharedRouteDistanceKm = partialDetails
+            ? partialDetails.sharedDistanceKm
+            : Math.round(routeALengthKm * Math.max(shareAB, shareBA) * 10) / 10;
 
           const meetingPoint = findMeetingPoint(lineA, lineB, 1000);
           let meetingData = { found: false, meetingPoint: null };
@@ -1059,6 +1145,9 @@ apiRouter.post("/match-search", async (req, res) => {
             };
           }
 
+          const isSeed = candidate.id && candidate.id.startsWith("j-seed-");
+          const isTest = candidate.profile_name?.toLowerCase().includes("test") || (candidate.id && candidate.id.startsWith("j-178"));
+
           matches.push({
             id: candidate.id,
             journey_id: candidate.id,
@@ -1068,9 +1157,19 @@ apiRouter.post("/match-search", async (req, res) => {
             drop: cleanLocationDisplay(candidate.drop_name) || candidate.drop_name,
             departure_date: candidate.departure_date || departureDate || null,
             departure_time: candidate.departure_time || departureTime || null,
+            matchType,
+            servesDestination,
+            connectsPickup,
+            partialDetails,
+            isSeed,
+            isTest,
             meetingData,
             data: {
               matched: true,
+              matchType,
+              servesDestination,
+              connectsPickup,
+              partialDetails,
               thresholdMeters: 1000,
               directionDifference,
               shareAB,

@@ -634,6 +634,36 @@
       color: var(--status-success);
     }
 
+    .meta-tag.highlight-warning {
+      background: var(--status-warning-bg);
+      color: #b45309;
+    }
+
+    .match-badge-partial {
+      background: var(--status-warning-bg);
+      color: #b45309;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+
+    .partial-landmark-box {
+      background: #fffbebf5;
+      border: 1px solid #fef3c7;
+      border-radius: 10px;
+      padding: 8px 12px;
+      font-size: 13px;
+      font-weight: 600;
+      color: #92400e;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
     .meeting-point-box {
       background: #f0fdf4;
       border: 1px solid #bbf7d0;
@@ -1725,8 +1755,12 @@
       if (!matches || !matches.length) {
         list.innerHTML = `
           <div class="match-card" style="text-align: center; color: var(--text-muted); padding: 28px 20px;">
-            <p style="font-weight: 700; font-size: 15.5px; margin-bottom: 4px; color: var(--text-heading);">No active matches found going your way right now.</p>
-            <p style="font-size: 13px;">Try expanding your search radius to 10 km or selecting a different departure time.</p>
+            <div style="font-size: 32px; margin-bottom: 8px;">🧭</div>
+            <p style="font-weight: 700; font-size: 16px; margin-bottom: 6px; color: var(--text-heading);">No suitable rides found</p>
+            <p style="font-size: 13.5px; color: var(--text-muted); line-height: 1.5; margin-bottom: 12px;">We couldn't find a ride that covers your destination or travels far enough along your route right now.</p>
+            <div style="font-size: 12.5px; background: rgba(37,99,235,0.06); border: 1px solid rgba(37,99,235,0.15); padding: 10px 14px; border-radius: 8px; color: var(--accent-blue); display: inline-block;">
+              💡 Try expanding your search radius to 10 km or selecting a different departure time.
+            </div>
           </div>
         `;
         return;
@@ -1734,9 +1768,11 @@
 
       let html = '';
       matches.forEach((m, idx) => {
+        const isPartial = m.matchType === "PARTIAL";
+
         const score = m.data ? m.data.routeMatchPercent : 0;
         const pickupDist = m.data ? m.data.pickupDistanceKm : 0;
-        const sharedDist = m.data ? m.data.sharedRouteDistanceKm : 0;
+        const sharedDist = (m.partialDetails && m.partialDetails.sharedDistanceKm) || (m.data ? m.data.sharedRouteDistanceKm : 0);
         const meeting = m.meetingData && m.meetingData.found ? m.meetingData.meetingPoint : null;
 
         const formattedDate = formatDateDDMMYYYY(m.departure_date);
@@ -1748,42 +1784,86 @@
           ? (meeting.display || `Meet near ${cleanPickup || 'pickup'}`)
           : null;
 
-        html += `
-          <div class="match-card ${idx === 0 ? 'active-match' : ''}" id="matchCard_${idx}" onclick="selectMatch(${idx})">
+        if (isPartial) {
+          const landmarkText = m.partialDetails?.dropoffLandmark || `landmark near ${cleanDrop}`;
+          html += `
+            <div class="match-card ${idx === 0 ? 'active-match' : ''}" id="matchCard_${idx}" onclick="selectMatch(${idx})">
 
-            <div class="match-top-bar">
-              <div class="match-driver-name">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent-blue)" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                ${escapeHtml(m.name || "Traveler")}
+              <div class="match-top-bar">
+                <div class="match-driver-name">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--status-warning)" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                  ${escapeHtml(m.name || "Traveler")}
+                </div>
+                <span class="match-badge-partial">Partial Ride Available</span>
               </div>
-              <span class="match-score-subtle">${score}% Route Match</span>
-            </div>
 
-            <div class="match-route-line">
-              <span>${escapeHtml(cleanPickup)}</span>
-              <span class="match-route-arrow">→</span>
-              <span>${escapeHtml(cleanDrop)}</span>
-            </div>
-
-            <div class="match-meta-grid">
-              <span class="meta-tag">📅 ${escapeHtml(formattedDate)} · ${escapeHtml(formattedTime)}</span>
-              <span class="meta-tag">📍 Pickup around ${escapeHtml(cleanPickup)}</span>
-              <span class="meta-tag highlight">🛣️ ${sharedDist} km together</span>
-            </div>
-
-            ${meetingDisplayText ? `
-              <div class="meeting-point-box">
-                📍 ${escapeHtml(meetingDisplayText)}
+              <div class="match-route-line">
+                <span>${escapeHtml(cleanPickup)}</span>
+                <span class="match-route-arrow">→</span>
+                <span>${escapeHtml(cleanDrop)}</span>
               </div>
-            ` : ''}
 
-            <div class="match-card-actions" onclick="event.stopPropagation();">
-              <button class="btn-join" id="btnJoin_${idx}" onclick="openConfirmModal(${idx})">Request to ride together</button>
-              <button class="btn-view-map" onclick="viewRoute(${idx})">View route</button>
+              <div class="match-meta-grid">
+                <span class="meta-tag">📅 ${escapeHtml(formattedDate)} · ${escapeHtml(formattedTime)}</span>
+                <span class="meta-tag">📍 Pickup around ${escapeHtml(cleanPickup)}</span>
+                <span class="meta-tag highlight-warning">🛣️ Travel together for ${sharedDist} km</span>
+              </div>
+
+              <div class="partial-landmark-box">
+                📍 <strong>Get down near:</strong> &nbsp;${escapeHtml(landmarkText)}
+              </div>
+
+              ${meetingDisplayText ? `
+                <div class="meeting-point-box">
+                  📍 ${escapeHtml(meetingDisplayText)}
+                </div>
+              ` : ''}
+
+              <div class="match-card-actions" onclick="event.stopPropagation();">
+                <button class="btn-view-map" style="width: 100%; font-weight: 700; height: 44px; background: var(--surface-subtle); color: var(--text-heading); border: 1px solid var(--border-color); border-radius: var(--radius-sm); cursor: pointer;" onclick="viewRoute(${idx})">View route details</button>
+              </div>
+
             </div>
+          `;
+        } else {
+          // FULL MATCH
+          html += `
+            <div class="match-card ${idx === 0 ? 'active-match' : ''}" id="matchCard_${idx}" onclick="selectMatch(${idx})">
 
-          </div>
-        `;
+              <div class="match-top-bar">
+                <div class="match-driver-name">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent-blue)" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                  ${escapeHtml(m.name || "Traveler")}
+                </div>
+                <span class="match-score-subtle">${score}% Route Match</span>
+              </div>
+
+              <div class="match-route-line">
+                <span>${escapeHtml(cleanPickup)}</span>
+                <span class="match-route-arrow">→</span>
+                <span>${escapeHtml(cleanDrop)}</span>
+              </div>
+
+              <div class="match-meta-grid">
+                <span class="meta-tag">📅 ${escapeHtml(formattedDate)} · ${escapeHtml(formattedTime)}</span>
+                <span class="meta-tag">📍 Pickup around ${escapeHtml(cleanPickup)}</span>
+                <span class="meta-tag highlight">🛣️ Ride together to ${escapeHtml(cleanDrop)} (${sharedDist} km)</span>
+              </div>
+
+              ${meetingDisplayText ? `
+                <div class="meeting-point-box">
+                  📍 ${escapeHtml(meetingDisplayText)}
+                </div>
+              ` : ''}
+
+              <div class="match-card-actions" onclick="event.stopPropagation();">
+                <button class="btn-join" id="btnJoin_${idx}" onclick="openConfirmModal(${idx})">Request to ride together</button>
+                <button class="btn-view-map" onclick="viewRoute(${idx})">View route</button>
+              </div>
+
+            </div>
+          `;
+        }
       });
 
       list.innerHTML = html;
@@ -1849,6 +1929,12 @@
         }).addTo(map);
       }
 
+      if (data.partialDetails && data.partialDetails.sharedLineGeojson) {
+        sharedLayer = L.geoJSON(data.partialDetails.sharedLineGeojson, {
+          style: { color: "#10b981", weight: 8, opacity: 0.95 }
+        }).addTo(map);
+      }
+
       if (meetingData && meetingData.found && meetingData.meetingPoint) {
         const mp = meetingData.meetingPoint;
         const icon = L.divIcon({
@@ -1861,11 +1947,10 @@
           .bindPopup(`<b>Meeting Point</b><br>${escapeHtml(mp.display || "Suggested meeting place")}`);
       }
 
-      if (routeALayer && routeBLayer) {
-        const group = L.featureGroup([routeALayer, routeBLayer]);
+      const layersToFit = [routeALayer, routeBLayer, sharedLayer].filter(Boolean);
+      if (layersToFit.length) {
+        const group = L.featureGroup(layersToFit);
         map.fitBounds(group.getBounds(), { padding: [40, 40] });
-      } else if (routeALayer) {
-        map.fitBounds(routeALayer.getBounds(), { padding: [40, 40] });
       }
     }
 
