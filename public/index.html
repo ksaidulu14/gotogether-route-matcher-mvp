@@ -1081,21 +1081,8 @@
     <!-- STATUS CONTAINER -->
     <div id="status"></div>
 
-    <!-- CONTENT GRID (RESULTS + MAP) -->
+    <!-- CONTENT GRID (MAP FIRST, RESULTS BELOW) -->
     <div class="content-grid">
-
-      <!-- MATCH RESULTS LIST -->
-      <section id="results">
-        <div class="results-header">
-          <h3 class="results-count-title" id="resultsTitle">Compatible Journeys</h3>
-          <span id="telemetryChip" class="telemetry-chip"></span>
-        </div>
-        <div class="trust-info-banner">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-          <span>GoTogetherRides checks nearby journeys, route direction and shared road segments before showing a match.</span>
-        </div>
-        <div id="resultsList"></div>
-      </section>
 
       <!-- MAP CONTAINER -->
       <section class="map-wrapper" id="mapWrapper">
@@ -1106,6 +1093,19 @@
           <div class="legend-item"><span class="dot-shared"></span> Shared Route</div>
           <div class="legend-item"><span class="dot-meeting">📍</span> Meeting Point</div>
         </div>
+      </section>
+
+      <!-- MATCH RESULTS LIST -->
+      <section id="results">
+        <div class="results-header">
+          <h3 class="results-count-title" id="resultsTitle">People going your way</h3>
+          <span id="telemetryChip" class="telemetry-chip"></span>
+        </div>
+        <div class="trust-info-banner">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+          <span>GoTogetherRides checks nearby journeys, route direction and shared road segments before showing a match.</span>
+        </div>
+        <div id="resultsList"></div>
       </section>
 
     </div>
@@ -1387,12 +1387,33 @@
 
         debounceTimer = setTimeout(async () => {
           try {
-            const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=6&countrycodes=in&q=${encodeURIComponent(query)}`;
-            const res = await fetch(url, { headers: { "User-Agent": "GoTogetherRides/1.0" } });
-
+            const hydViewbox = "78.2000,17.2000,78.7000,17.6000";
+            const boundedUrl = `https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=8&countrycodes=in&viewbox=${hydViewbox}&bounded=1&q=${encodeURIComponent(query)}`;
+            
+            let res = await fetch(boundedUrl, { headers: { "User-Agent": "GoTogetherRides/1.0" } });
             if (!res.ok) throw new Error("Search network error");
+            
+            let data = await res.json();
 
-            const data = await res.json();
+            // If no or few results in Hyderabad viewbox, search broader India as fallback
+            if (!Array.isArray(data) || data.length < 2) {
+              const fallbackUrl = `https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=8&countrycodes=in&q=${encodeURIComponent(query)}`;
+              const fallbackRes = await fetch(fallbackUrl, { headers: { "User-Agent": "GoTogetherRides/1.0" } });
+              if (fallbackRes.ok) {
+                const fallbackData = await fallbackRes.json();
+                if (Array.isArray(fallbackData) && fallbackData.length > 0) {
+                  const combined = Array.isArray(data) ? [...data] : [];
+                  const seenOsmIds = new Set(combined.map(d => d.osm_id));
+                  fallbackData.forEach(item => {
+                    if (!seenOsmIds.has(item.osm_id)) {
+                      seenOsmIds.add(item.osm_id);
+                      combined.push(item);
+                    }
+                  });
+                  data = combined;
+                }
+              }
+            }
 
             if (!data || !data.length) {
               suggestions.innerHTML = (isPickup ? renderGPSOption() : "") + `
@@ -1547,32 +1568,58 @@
         if (!j.pickup_lat || !j.pickup_lon) return;
 
         const personName = (j.profiles && j.profiles.name) ? j.profiles.name : "Traveler";
+        const initial = personName.charAt(0).toUpperCase() || 'P';
         const cleanPickup = formatCleanArea(j.pickup_name) || j.pickup_name;
         const cleanDrop = formatCleanArea(j.drop_name) || j.drop_name;
 
         const matchObj = currentMatches.find(m => m.id === j.id || (m.journey && m.journey.id === j.id));
-        const score = matchObj && matchObj.data ? matchObj.data.routeMatchPercent : 0;
+        const isSelected = activeMatchIndex !== null && currentMatches[activeMatchIndex] && (currentMatches[activeMatchIndex].id === j.id);
+
+        const isFullMatch = matchObj && matchObj.matchType === "FULL";
+        const isPartialMatch = matchObj && matchObj.matchType === "PARTIAL";
         const meeting = matchObj && matchObj.meetingData && matchObj.meetingData.found;
         const depDate = formatDateDDMMYYYY(j.departure_date);
         const depTime = formatTime12H(j.departure_time);
 
+        let markerBg = "#0f172a";
+        if (isFullMatch) markerBg = "#2563eb";
+        else if (isPartialMatch) markerBg = "#d97706";
+
         const markerIcon = L.divIcon({
-          className: 'custom-nearby-icon',
-          html: `<div style="width:28px;height:28px;background:#ffffff;border:2px solid ${score > 0 ? '#2563eb' : '#94a3b8'};border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,0.2);font-size:14px;">🚗</div>`,
-          iconSize: [28, 28],
-          iconAnchor: [14, 14]
+          className: 'custom-person-icon',
+          html: `
+            <div class="person-map-pin ${isSelected ? 'selected' : ''}" style="
+              width: ${isSelected ? '36px' : '30px'};
+              height: ${isSelected ? '36px' : '30px'};
+              background: ${markerBg};
+              color: #ffffff;
+              border-radius: 50%;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              font-weight: 800;
+              font-size: ${isSelected ? '15px' : '13px'};
+              border: 2px solid #ffffff;
+              box-shadow: ${isSelected ? '0 0 0 4px rgba(37,99,235,0.4), 0 4px 12px rgba(0,0,0,0.3)' : '0 2px 6px rgba(0,0,0,0.25)'};
+              transition: all 0.2s ease;
+            ">
+              ${escapeHtml(initial)}
+            </div>
+          `,
+          iconSize: isSelected ? [36, 36] : [30, 30],
+          iconAnchor: isSelected ? [18, 18] : [15, 15]
         });
 
         const popupHtml = `
           <div style="min-width: 210px; padding: 2px;">
-            <div style="font-weight: 800; font-size: 14.5px; color: #0f172a; margin-bottom: 4px;">🚗 ${escapeHtml(personName)}</div>
+            <div style="font-weight: 800; font-size: 14.5px; color: #0f172a; margin-bottom: 4px;">${escapeHtml(personName)}</div>
             <div style="font-size: 13px; font-weight: 700; color: #2563eb; margin-bottom: 6px;">${escapeHtml(cleanPickup)} → ${escapeHtml(cleanDrop)}</div>
             <div style="font-size: 12px; color: #64748b; margin-bottom: 8px;">📅 ${escapeHtml(depDate)} · ${escapeHtml(depTime)}</div>
-            ${score > 0 ? `<div style="display:inline-block; background:linear-gradient(135deg,#1e40af,#2563eb); color:#fff; font-weight:800; font-size:11.5px; padding:2px 8px; border-radius:12px; margin-bottom:8px;">${score}% Route Match</div>` : ''}
+            ${isFullMatch ? `<div style="display:inline-block; background:var(--status-success-bg); color:var(--status-success); font-weight:800; font-size:11.5px; padding:2px 8px; border-radius:6px; margin-bottom:8px;">Full Match</div>` : isPartialMatch ? `<div style="display:inline-block; background:var(--status-warning-bg); color:var(--status-warning); font-size:11.5px; font-weight:700; padding:2px 8px; border-radius:6px; margin-bottom:8px;">Partial Match</div>` : '<div style="display:inline-block; background:var(--surface-subtle); color:var(--text-muted); font-size:11.5px; font-weight:700; padding:2px 8px; border-radius:6px; margin-bottom:8px;">Nearby route</div>'}
             ${meeting ? `<div style="font-size:11.5px; color:#166534; background:#f0fdf4; border:1px solid #bbf7d0; padding:3px 8px; border-radius:6px; margin-bottom:8px;">📍 Meeting Point Available</div>` : ''}
             <div style="display:flex; gap:6px; margin-top:6px;">
               <button type="button" style="flex:1; height:34px; background:#2563eb; color:#fff; border:none; border-radius:6px; font-weight:700; font-size:12px; cursor:pointer;" onclick="viewRouteFromMap('${j.id}')">View Route</button>
-              ${score > 0 ? `<button type="button" style="flex:1; height:34px; background:#059669; color:#fff; border:none; border-radius:6px; font-weight:700; font-size:12px; cursor:pointer;" onclick="openConfirmModalById('${j.id}')">Request</button>` : ''}
+              ${isFullMatch ? `<button type="button" style="flex:1; height:34px; background:#059669; color:#fff; border:none; border-radius:6px; font-weight:700; font-size:12px; cursor:pointer;" onclick="openConfirmModalById('${j.id}')">Request</button>` : ''}
             </div>
           </div>
         `;
@@ -1740,6 +1787,7 @@
     function renderMatchResults(matches, timing) {
       const results = document.getElementById("results");
       const list = document.getElementById("resultsList");
+      const titleEl = document.getElementById("resultsTitle");
       const telemetryChip = document.getElementById("telemetryChip");
 
       results.style.display = "block";
@@ -1753,25 +1801,80 @@
       }
 
       if (!matches || !matches.length) {
-        list.innerHTML = `
-          <div class="match-card" style="text-align: center; color: var(--text-muted); padding: 28px 20px;">
-            <div style="font-size: 32px; margin-bottom: 8px;">🧭</div>
-            <p style="font-weight: 700; font-size: 16px; margin-bottom: 6px; color: var(--text-heading);">No suitable rides found</p>
-            <p style="font-size: 13.5px; color: var(--text-muted); line-height: 1.5; margin-bottom: 12px;">We couldn't find a ride that covers your destination or travels far enough along your route right now.</p>
-            <div style="font-size: 12.5px; background: rgba(37,99,235,0.06); border: 1px solid rgba(37,99,235,0.15); padding: 10px 14px; border-radius: 8px; color: var(--accent-blue); display: inline-block;">
-              💡 Try expanding your search radius to 10 km or selecting a different departure time.
-            </div>
+        titleEl.textContent = "No exact matches yet";
+
+        const nearbyOnly = activeJourneysData.filter(j => 
+          j.id && j.id !== currentUserJourneyId && j.pickup_lat && j.pickup_lon
+        );
+
+        let html = `
+          <div class="no-match-box" style="text-align: center; color: var(--text-muted); padding: 24px 16px; background: var(--surface-card); border: 1px solid var(--border-color); border-radius: var(--radius-xl); margin-bottom: 20px;">
+            <p style="font-weight: 700; font-size: 15.5px; margin-bottom: 4px; color: var(--text-heading);">No exact matches yet</p>
+            <p style="font-size: 13px; line-height: 1.4;">We couldn't find a ride covering your exact destination right now.</p>
           </div>
         `;
+
+        if (nearbyOnly.length > 0) {
+          html += `
+            <div class="nearby-section-header" style="margin-top: 12px; margin-bottom: 12px;">
+              <h4 style="font-size: 16px; font-weight: 800; color: var(--text-heading);">People travelling nearby</h4>
+              <p style="font-size: 12.5px; color: var(--text-muted);">Travelers in your vicinity. Route compatibility not guaranteed.</p>
+            </div>
+          `;
+
+          nearbyOnly.forEach(j => {
+            const pName = (j.profiles && j.profiles.name) ? j.profiles.name : "Traveler";
+            const cleanP = formatCleanArea(j.pickup_name) || j.pickup_name;
+            const cleanD = formatCleanArea(j.drop_name) || j.drop_name;
+            const depDate = formatDateDDMMYYYY(j.departure_date);
+            const depTime = formatTime12H(j.departure_time);
+
+            html += `
+              <div class="match-card nearby-card" style="border-left: 4px solid var(--text-light);" onclick="viewRouteFromMap('${j.id}')">
+                <div class="match-top-bar">
+                  <div class="match-driver-name">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                    ${escapeHtml(pName)}
+                  </div>
+                  <span class="badge-nearby" style="background: var(--surface-subtle); color: var(--text-muted); font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 6px;">Nearby route</span>
+                </div>
+
+                <div class="match-route-line">
+                  <span>${escapeHtml(cleanP)}</span>
+                  <span class="match-route-arrow">→</span>
+                  <span>${escapeHtml(cleanD)}</span>
+                </div>
+
+                <div class="match-meta-grid">
+                  <span class="meta-tag">📅 ${escapeHtml(depDate)} · ${escapeHtml(depTime)}</span>
+                  <span class="meta-tag">📍 Pickup around ${escapeHtml(cleanP)}</span>
+                </div>
+
+                <div class="match-card-actions" onclick="event.stopPropagation();">
+                  <button class="btn-view-map" style="width: 100%; height: 40px; font-weight: 700; background: var(--surface-subtle); color: var(--text-heading); border: 1px solid var(--border-color); border-radius: var(--radius-sm); cursor: pointer;" onclick="viewRouteFromMap('${j.id}')">View route</button>
+                </div>
+              </div>
+            `;
+          });
+        } else {
+          html += `
+            <div style="text-align: center; font-size: 13px; color: var(--text-muted); padding: 16px; background: rgba(37,99,235,0.05); border-radius: var(--radius-md);">
+              💡 <strong>Be the first!</strong> Post your journey schedule and others heading your way will find you.
+            </div>
+          `;
+        }
+
+        list.innerHTML = html;
         return;
       }
+
+      // EXACT MATCHES FOUND
+      titleEl.textContent = "People going your way";
 
       let html = '';
       matches.forEach((m, idx) => {
         const isPartial = m.matchType === "PARTIAL";
-
         const score = m.data ? m.data.routeMatchPercent : 0;
-        const pickupDist = m.data ? m.data.pickupDistanceKm : 0;
         const sharedDist = (m.partialDetails && m.partialDetails.sharedDistanceKm) || (m.data ? m.data.sharedRouteDistanceKm : 0);
         const meeting = m.meetingData && m.meetingData.found ? m.meetingData.meetingPoint : null;
 
@@ -1787,14 +1890,14 @@
         if (isPartial) {
           const landmarkText = m.partialDetails?.dropoffLandmark || `landmark near ${cleanDrop}`;
           html += `
-            <div class="match-card ${idx === 0 ? 'active-match' : ''}" id="matchCard_${idx}" onclick="selectMatch(${idx})">
+            <div class="match-card ${idx === activeMatchIndex ? 'active-match' : ''}" id="matchCard_${idx}" onclick="selectMatch(${idx})">
 
               <div class="match-top-bar">
                 <div class="match-driver-name">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--status-warning)" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                   ${escapeHtml(m.name || "Traveler")}
                 </div>
-                <span class="match-badge-partial">Partial Ride Available</span>
+                <span class="match-badge-partial">Partial Match</span>
               </div>
 
               <div class="match-route-line">
@@ -1828,14 +1931,14 @@
         } else {
           // FULL MATCH
           html += `
-            <div class="match-card ${idx === 0 ? 'active-match' : ''}" id="matchCard_${idx}" onclick="selectMatch(${idx})">
+            <div class="match-card ${idx === activeMatchIndex ? 'active-match' : ''}" id="matchCard_${idx}" onclick="selectMatch(${idx})">
 
               <div class="match-top-bar">
                 <div class="match-driver-name">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent-blue)" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                   ${escapeHtml(m.name || "Traveler")}
                 </div>
-                <span class="match-score-subtle">${score}% Route Match</span>
+                <span class="match-badge-full" style="background:var(--status-success-bg); color:var(--status-success); font-size:11px; font-weight:700; padding:3px 8px; border-radius:6px; text-transform:uppercase;">Full Match</span>
               </div>
 
               <div class="match-route-line">
@@ -1847,7 +1950,7 @@
               <div class="match-meta-grid">
                 <span class="meta-tag">📅 ${escapeHtml(formattedDate)} · ${escapeHtml(formattedTime)}</span>
                 <span class="meta-tag">📍 Pickup around ${escapeHtml(cleanPickup)}</span>
-                <span class="meta-tag highlight">🛣️ Ride together to ${escapeHtml(cleanDrop)} (${sharedDist} km)</span>
+                <span class="meta-tag highlight">🛣️ ${sharedDist} km together</span>
               </div>
 
               ${meetingDisplayText ? `
@@ -1885,6 +1988,15 @@
       const m = currentMatches[idx];
       if (m && m.data) {
         drawMatchOnMap(m.data, m.meetingData);
+      }
+
+      if (activeJourneysData && activeJourneysData.length) {
+        renderNearbyJourneys(activeJourneysData);
+      }
+
+      if (window.innerWidth < 768) {
+        const mapEl = document.getElementById("mapWrapper");
+        if (mapEl) mapEl.scrollIntoView({ behavior: "smooth", block: "start" });
       }
     }
 
