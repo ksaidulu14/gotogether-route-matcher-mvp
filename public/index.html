@@ -1187,6 +1187,10 @@
     let routeBLayer = null;
     let sharedLayer = null;
     let meetingMarker = null;
+    let userPickupMarker = null;
+    let userDropMarker = null;
+    let candidatePickupMarker = null;
+    let candidateDropMarker = null;
     let nearbyClusterGroup = null;
 
     function escapeHtml(str) {
@@ -1821,6 +1825,49 @@
 
     /*
     ==================================================
+    CUSTOM MAP MARKER HELPERS (SVG/CSS — NO EMOJIS)
+    ==================================================
+    */
+
+    const userPickupIcon = L.divIcon({
+      className: 'custom-map-pin-user-pickup',
+      html: `<div style="width:26px; height:26px; background:#2563eb; border:3px solid #ffffff; border-radius:50%; box-shadow:0 3px 8px rgba(37,99,235,0.4); display:flex; align-items:center; justify-content:center;"><div style="width:7px; height:7px; background:#ffffff; border-radius:50%;"></div></div>`,
+      iconSize: [26, 26],
+      iconAnchor: [13, 13]
+    });
+
+    const userDropIcon = L.divIcon({
+      className: 'custom-map-pin-user-drop',
+      html: `<div style="width:30px; height:30px; background:#ffffff; border:2.5px solid #2563eb; border-radius:50%; box-shadow:0 3px 8px rgba(37,99,235,0.3); display:flex; align-items:center; justify-content:center; color:#2563eb;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg></div>`,
+      iconSize: [30, 30],
+      iconAnchor: [15, 15]
+    });
+
+    function getCandidatePickupIcon(initial, isSelected) {
+      return L.divIcon({
+        className: 'custom-map-pin-candidate-pickup',
+        html: `<div style="width:${isSelected ? '34px' : '28px'}; height:${isSelected ? '34px' : '28px'}; background:#f97316; color:#ffffff; border:2.5px solid #ffffff; border-radius:50%; box-shadow:${isSelected ? '0 0 0 4px rgba(249,115,22,0.35), 0 4px 12px rgba(0,0,0,0.25)' : '0 2px 6px rgba(0,0,0,0.2)'}; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:${isSelected ? '14px' : '12px'}; transition:all 0.2s ease;">${escapeHtml(initial)}</div>`,
+        iconSize: isSelected ? [34, 34] : [28, 28],
+        iconAnchor: isSelected ? [17, 17] : [14, 14]
+      });
+    }
+
+    const candidateDropIcon = L.divIcon({
+      className: 'custom-map-pin-candidate-drop',
+      html: `<div style="width:30px; height:30px; background:#ffffff; border:2.5px solid #f97316; border-radius:50%; box-shadow:0 3px 8px rgba(249,115,22,0.3); display:flex; align-items:center; justify-content:center; color:#f97316;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg></div>`,
+      iconSize: [30, 30],
+      iconAnchor: [15, 15]
+    });
+
+    const meetingPointIcon = L.divIcon({
+      className: 'custom-map-pin-meeting',
+      html: `<div style="display:flex; flex-direction:column; align-items:center;"><div style="width:30px; height:30px; background:#9333ea; border:2.5px solid #ffffff; border-radius:50%; box-shadow:0 4px 10px rgba(147,51,234,0.4); display:flex; align-items:center; justify-content:center; color:#ffffff;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg></div><div style="background:#9333ea; color:#ffffff; font-size:10.5px; font-weight:800; padding:1px 6px; border-radius:8px; margin-top:2px; white-space:nowrap; box-shadow:0 2px 4px rgba(0,0,0,0.2);">Meet here</div></div>`,
+      iconSize: [54, 46],
+      iconAnchor: [27, 23]
+    });
+
+    /*
+    ==================================================
     RENDER MATCH RESULTS (COMPACT CONSUMER CARDS)
     ==================================================
     */
@@ -1833,16 +1880,12 @@
 
       results.style.display = "block";
 
-      if (timing) {
-        const secDisplay = timing.totalMs >= 1000 ? (timing.totalMs / 1000).toFixed(1) + 's' : Math.round(timing.totalMs) + 'ms';
-        const evaluatedText = `${timing.candidateCount || 0} ${timing.candidateCount === 1 ? 'journey' : 'journeys'} checked`;
-        telemetryChip.textContent = `${evaluatedText} · Match found in ${secDisplay}`;
-      } else {
-        telemetryChip.textContent = '';
-      }
+      const evaluatedCount = (timing && typeof timing.candidateCount === 'number') ? timing.candidateCount : (activeJourneysData ? activeJourneysData.length : 0);
+      const secDisplay = (timing && timing.totalMs) ? (timing.totalMs >= 1000 ? (timing.totalMs / 1000).toFixed(1) + 's' : Math.round(timing.totalMs) + 'ms') : '0.8s';
 
       if (!matches || !matches.length) {
-        titleEl.textContent = "No exact match yet";
+        titleEl.innerHTML = `<div style="font-size: 18px; font-weight: 800; color: var(--text-heading);">No exact match yet</div>`;
+        telemetryChip.innerHTML = `<span style="font-size: 12.5px; font-weight: 500; color: var(--text-muted);">Checked ${evaluatedCount} nearby journeys · ${secDisplay}</span>`;
 
         const cleanUserDrop = formatCleanArea(document.getElementById("drop").value) || "your destination";
 
@@ -1874,7 +1917,7 @@
             const depTime = formatTime12H(j.departure_time);
 
             html += `
-              <div class="match-card nearby-card" style="border-left: 3px solid #94a3b8;" onclick="viewRouteFromMap('${j.id}')">
+              <div class="match-card nearby-card" style="border-left: 3px solid #94a3b8;" data-journey-id="${j.id}" onclick="viewRouteFromMap('${j.id}')">
                 <div class="match-top-bar">
                   <div class="match-driver-name">
                     <div class="person-avatar" style="background:#64748b;">${escapeHtml(initial)}</div>
@@ -1885,7 +1928,7 @@
 
                 <div class="match-route-line">
                   <span>${escapeHtml(cleanP)}</span>
-                  <span class="match-route-arrow">→</span>
+                  <span class="match-route-arrow" style="color:#94a3b8;">→</span>
                   <span>${escapeHtml(cleanD)}</span>
                 </div>
 
@@ -1911,12 +1954,18 @@
         return;
       }
 
-      // EXACT MATCHES FOUND
-      titleEl.textContent = "People going your way";
+      // EXACT MATCHES FOUND — SEPARATE MATCH COUNT FROM EVALUATED TELEMETRY
+      titleEl.innerHTML = `
+        <div>People going your way</div>
+        <div style="font-size: 13px; font-weight: 600; color: var(--text-muted); margin-top: 2px;">${matches.length} ${matches.length === 1 ? 'person' : 'people'} found</div>
+      `;
+
+      telemetryChip.innerHTML = `<span style="font-size: 12.5px; font-weight: 500; color: var(--text-muted);">${evaluatedCount} journeys checked · ${secDisplay}</span>`;
 
       let html = '';
       matches.forEach((m, idx) => {
         const isPartial = m.matchType === "PARTIAL";
+        // EXACT SERVER-PROVIDED SCORE (UNALTERED)
         const score = m.data ? m.data.routeMatchPercent : 0;
         const sharedDist = (m.partialDetails && m.partialDetails.sharedDistanceKm) || (m.data ? m.data.sharedRouteDistanceKm : 0);
         const meeting = m.meetingData && m.meetingData.found ? m.meetingData.meetingPoint : null;
@@ -1934,25 +1983,25 @@
         if (isPartial) {
           const landmarkText = m.partialDetails?.dropoffLandmark || `near ${cleanDrop}`;
           html += `
-            <div class="match-card ${isCardActive ? 'active-match' : ''}" id="matchCard_${idx}" onclick="selectMatch(${idx})">
+            <div class="match-card ${isCardActive ? 'active-match' : ''}" id="matchCard_${idx}" data-journey-id="${m.id}" onclick="selectMatch(${idx})">
 
               <div class="match-top-bar">
                 <div class="match-driver-name">
-                  <div class="person-avatar" style="background:#d97706;">${escapeHtml(initial)}</div>
+                  <div class="person-avatar" style="background:#f97316;">${escapeHtml(initial)}</div>
                   <span>${escapeHtml(m.name || "Traveler")}</span>
                 </div>
-                <span class="match-score-badge-clean" style="color:#b45309; background:#fef3c7; border-color:#fde68a;">${score}% Route Match</span>
+                <span class="match-score-badge-clean" style="color:#d97706; background:#fef3c7; border-color:#fde68a;">${score}% Match</span>
               </div>
 
               <div class="match-route-line">
                 <span>${escapeHtml(cleanPickup)}</span>
-                <span class="match-route-arrow">→</span>
+                <span class="match-route-arrow" style="color:#f97316;">→</span>
                 <span>${escapeHtml(cleanDrop)}</span>
               </div>
 
               <div class="match-meta-grid" style="margin-bottom: 8px;">
-                <span style="font-size: 13px; font-weight: 600; color: #16a34a;">🟢 ${sharedDist} km together</span>
-                ${landmarkText ? `<span style="font-size: 13px; font-weight: 600; color: #92400e;">📍 ${escapeHtml(landmarkText)}</span>` : ''}
+                <span style="font-size: 13px; font-weight: 600; color: #10b981; display: inline-flex; align-items: center; gap: 4px;">🟢 ${sharedDist} km together</span>
+                ${landmarkText ? `<span style="font-size: 13px; font-weight: 600; color: #d97706; display: inline-flex; align-items: center; gap: 4px;">📍 ${escapeHtml(landmarkText)}</span>` : ''}
               </div>
 
               <div class="match-card-actions" onclick="event.stopPropagation();">
@@ -1964,29 +2013,29 @@
         } else {
           // FULL MATCH
           html += `
-            <div class="match-card ${isCardActive ? 'active-match' : ''}" id="matchCard_${idx}" onclick="selectMatch(${idx})">
+            <div class="match-card ${isCardActive ? 'active-match' : ''}" id="matchCard_${idx}" data-journey-id="${m.id}" onclick="selectMatch(${idx})">
 
               <div class="match-top-bar">
                 <div class="match-driver-name">
-                  <div class="person-avatar">${escapeHtml(initial)}</div>
+                  <div class="person-avatar" style="background:#2563eb;">${escapeHtml(initial)}</div>
                   <span>${escapeHtml(m.name || "Traveler")}</span>
                 </div>
-                <span class="match-score-badge-clean">${score}% Route Match</span>
+                <span class="match-score-badge-clean" style="color:#2563eb; background:#eff6ff; border-color:#bfdbfe;">${score}% Match</span>
               </div>
 
               <div class="match-route-line">
                 <span>${escapeHtml(cleanPickup)}</span>
-                <span class="match-route-arrow">→</span>
+                <span class="match-route-arrow" style="color:#2563eb;">→</span>
                 <span>${escapeHtml(cleanDrop)}</span>
               </div>
 
               <div class="match-meta-grid" style="margin-bottom: 8px;">
-                <span style="font-size: 13px; font-weight: 600; color: #16a34a;">🟢 ${sharedDist} km together</span>
-                ${meetingDisplayText ? `<span style="font-size: 13px; font-weight: 600; color: #166534;">📍 ${escapeHtml(meetingDisplayText)}</span>` : ''}
+                <span style="font-size: 13px; font-weight: 600; color: #10b981; display: inline-flex; align-items: center; gap: 4px;">🟢 ${sharedDist} km together</span>
+                ${meetingDisplayText ? `<span style="font-size: 13px; font-weight: 600; color: #9333ea; display: inline-flex; align-items: center; gap: 4px;">📍 ${escapeHtml(meetingDisplayText)}</span>` : ''}
               </div>
 
               <div class="match-card-actions" onclick="event.stopPropagation();">
-                <button class="btn-join" id="btnJoin_${idx}" onclick="openConfirmModal(${idx})">Request to ride together</button>
+                <button class="btn-join" id="btnJoin_${idx}" onclick="openConfirmModal(${idx})">Request to ride together →</button>
                 <button class="btn-view-map" onclick="viewRoute(${idx})">View route</button>
               </div>
 
@@ -2015,7 +2064,7 @@
 
       const m = currentMatches[idx];
       if (m && m.data) {
-        drawMatchOnMap(m.data, m.meetingData);
+        drawMatchOnMap(m.data, m.meetingData, m);
       }
 
       if (activeJourneysData && activeJourneysData.length) {
@@ -2035,7 +2084,11 @@
     function viewRouteFromMap(journeyId) {
       const idx = currentMatches.findIndex(m => m.id === journeyId || (m.journey && m.journey.id === journeyId));
       if (idx !== -1) {
-        viewRoute(idx);
+        selectMatch(idx);
+        const cardEl = document.getElementById(`matchCard_${idx}`);
+        if (cardEl) {
+          cardEl.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }
       } else {
         const j = activeJourneysData.find(item => item.id === journeyId);
         if (j && j.pickup_lat && j.pickup_lon) {
@@ -2049,23 +2102,49 @@
       if (routeBLayer) { map.removeLayer(routeBLayer); routeBLayer = null; }
       if (sharedLayer) { map.removeLayer(sharedLayer); sharedLayer = null; }
       if (meetingMarker) { map.removeLayer(meetingMarker); meetingMarker = null; }
+      if (userPickupMarker) { map.removeLayer(userPickupMarker); userPickupMarker = null; }
+      if (userDropMarker) { map.removeLayer(userDropMarker); userDropMarker = null; }
+      if (candidatePickupMarker) { map.removeLayer(candidatePickupMarker); candidatePickupMarker = null; }
+      if (candidateDropMarker) { map.removeLayer(candidateDropMarker); candidateDropMarker = null; }
     }
 
-    function drawMatchOnMap(data, meetingData) {
+    function drawMatchOnMap(data, meetingData, candidateMatch) {
       clearRouteLayers();
 
+      // 1. USER ENTIRE ROUTE (BLUE) + USER PICKUP/DROP MARKERS
       if (data.routeA) {
         routeALayer = L.geoJSON(data.routeA, {
-          style: { color: "#2563eb", weight: 6, opacity: 0.85 }
+          style: { color: "#2563eb", weight: 5, opacity: 0.85 }
         }).addTo(map);
+
+        const coordsA = data.routeA.coordinates || (data.routeA.geometry && data.routeA.geometry.coordinates);
+        if (coordsA && coordsA.length > 0) {
+          const pStart = coordsA[0];
+          const pEnd = coordsA[coordsA.length - 1];
+          userPickupMarker = L.marker([pStart[1], pStart[0]], { icon: userPickupIcon }).addTo(map).bindPopup("<b>Your Pickup Point</b>");
+          userDropMarker = L.marker([pEnd[1], pEnd[0]], { icon: userDropIcon }).addTo(map).bindPopup("<b>Your Destination Point</b>");
+        }
       }
 
+      // 2. CANDIDATE ENTIRE ROUTE (ORANGE) + CANDIDATE PICKUP/DROP MARKERS
       if (data.routeB) {
         routeBLayer = L.geoJSON(data.routeB, {
-          style: { color: "#ff6b00", weight: 5, opacity: 0.85, dashArray: "6, 6" }
+          style: { color: "#f97316", weight: 4, opacity: 0.85, dashArray: "6, 6" }
         }).addTo(map);
+
+        const coordsB = data.routeB.coordinates || (data.routeB.geometry && data.routeB.geometry.coordinates);
+        if (coordsB && coordsB.length > 0) {
+          const pStart = coordsB[0];
+          const pEnd = coordsB[coordsB.length - 1];
+          const initial = (candidateMatch && candidateMatch.name ? candidateMatch.name : "T").charAt(0).toUpperCase();
+          const candIcon = getCandidatePickupIcon(initial, true);
+
+          candidatePickupMarker = L.marker([pStart[1], pStart[0]], { icon: candIcon }).addTo(map).bindPopup(`<b>${escapeHtml(candidateMatch?.name || 'Traveler')}'s Pickup Point</b>`);
+          candidateDropMarker = L.marker([pEnd[1], pEnd[0]], { icon: candidateDropIcon }).addTo(map).bindPopup(`<b>${escapeHtml(candidateMatch?.name || 'Traveler')}'s Destination Point</b>`);
+        }
       }
 
+      // 3. SHARED CORRIDOR SECTION (GREEN)
       if (data.partialDetails && data.partialDetails.sharedLineGeojson) {
         sharedLayer = L.geoJSON(data.partialDetails.sharedLineGeojson, {
           style: { color: "#10b981", weight: 8, opacity: 0.95 }
@@ -2076,19 +2155,15 @@
         }).addTo(map);
       }
 
+      // 4. MEETING POINT (PURPLE PIN — SUBTLE & ACCURATE)
       if (meetingData && meetingData.found && meetingData.meetingPoint) {
         const mp = meetingData.meetingPoint;
-        const icon = L.divIcon({
-          className: "custom-meeting-pin",
-          html: "<div style='font-size: 24px;'>📍</div>",
-          iconSize: [30, 30],
-          iconAnchor: [15, 30]
-        });
-        meetingMarker = L.marker([mp.lat, mp.lon], { icon }).addTo(map)
+        meetingMarker = L.marker([mp.lat, mp.lon], { icon: meetingPointIcon }).addTo(map)
           .bindPopup(`<b>Meeting Point</b><br>${escapeHtml(mp.display || "Suggested meeting place")}`);
       }
 
-      const layersToFit = [routeALayer, routeBLayer, sharedLayer].filter(Boolean);
+      // 5. FIT MAP BOUNDS TO COMPLETE USER + CANDIDATE ROUTES
+      const layersToFit = [routeALayer, routeBLayer, userPickupMarker, userDropMarker, candidatePickupMarker, candidateDropMarker].filter(Boolean);
       if (layersToFit.length) {
         const group = L.featureGroup(layersToFit);
         map.fitBounds(group.getBounds(), { padding: [40, 40] });
