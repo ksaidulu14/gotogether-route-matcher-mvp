@@ -337,6 +337,90 @@ function findMeetingPoint(lineA, lineB, threshold = 1000) {
 
 /*
 ==================================================
+HUMAN LOCATION & MEETING POINT HELPERS
+==================================================
+*/
+
+const meetingPointCache = new Map();
+
+function cleanLocationDisplay(fullString) {
+  if (!fullString) return "";
+  let s = String(fullString).trim();
+  // Filter out raw Nominatim technical details, postal codes, or Ward prefixes
+  const parts = s.split(',').map(p => p.trim()).filter(Boolean);
+  if (!parts.length) return s;
+
+  const filtered = parts
+    .map(p => p.replace(/^Ward\s+\d+\s*/i, '').trim())
+    .filter(p => 
+      Boolean(p) &&
+      !/^\d{5,6}$/.test(p) && 
+      !/^(India|Telangana|Andhra Pradesh)$/i.test(p) &&
+      !/^(District|Mandal|State)$/i.test(p)
+    );
+
+  if (filtered.length >= 2) {
+    return `${filtered[0]}, ${filtered[1]}`;
+  } else if (filtered.length === 1) {
+    return filtered[0];
+  }
+  return parts[0].replace(/^Ward\s+\d+\s*/i, '').trim() || parts[0];
+}
+
+async function getHumanReadableMeetingPoint(lat, lon, fallbackLocality) {
+  if (!lat || !lon) {
+    const loc = cleanLocationDisplay(fallbackLocality);
+    return loc ? `Meet around ${loc}` : "Meet near pickup route";
+  }
+  
+  const key = `${lat.toFixed(3)},${lon.toFixed(3)}`;
+  if (meetingPointCache.has(key)) {
+    return meetingPointCache.get(key);
+  }
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 2500);
+
+    const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}&addressdetails=1`;
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: { "User-Agent": "GoTogetherRides/1.0" }
+    });
+    clearTimeout(timeoutId);
+
+    if (response.ok) {
+      const data = await response.json();
+      if (data && data.address) {
+        const addr = data.address;
+        const place = addr.suburb || addr.neighbourhood || addr.quarter || addr.amenity || addr.road || addr.railway || addr.bus_stop;
+        const city = addr.city || addr.town || addr.village || addr.city_district;
+        
+        let display = "";
+        if (place) {
+          display = `Meet near ${place}`;
+        } else if (city) {
+          display = `Meet around ${city}`;
+        }
+        
+        if (display) {
+          meetingPointCache.set(key, display);
+          return display;
+        }
+      }
+    }
+  } catch (e) {
+    // Ignore network timeouts for meeting point geocoding
+  }
+
+  const cleanLoc = cleanLocationDisplay(fallbackLocality);
+  const defaultDisplay = cleanLoc ? `Meet around ${cleanLoc}` : "Meet near pickup route";
+  meetingPointCache.set(key, defaultDisplay);
+  return defaultDisplay;
+}
+
+/*
+==================================================
 EXPRESS ROUTER (MOUNTED DUAL FOR VERCEL & LOCAL)
 ==================================================
 */
@@ -372,6 +456,101 @@ apiRouter.post("/journeys", async (req, res) => {
     } else {
       if (!pickupLat || !pickupLon) await sleep(500);
       dropGeo = await geocode(drop);
+    }
+
+    const todayStr = new Date().toISOString().split('T')[0];
+    const defaultTimeStr = '08:30:00';
+    const targetDate = departureDate || todayStr;
+    const targetTime = departureTime ? (departureTime.length === 5 ? `${departureTime}:00` : departureTime) : defaultTimeStr;
+
+    // IDEMPOTENCE CHECK: Reuse existing active journey if details match
+    const existingInMemory = inMemoryJourneys.find(j => 
+      j.status === "active" &&
+      (j.id === req.body.requesterJourneyId || 
+       j.user_id === req.body.userId ||
+       ((j.profiles?.name?.toLowerCase() === name.toLowerCase() || j.pickup_name?.toLowerCase() === pickup.toLowerCase()) &&
+        j.drop_name?.toLowerCase() === drop.toLowerCase() &&
+        (j.departure_date === targetDate || !j.departure_date) &&
+        (j.departure_time?.substring(0, 5) === targetTime.substring(0, 5) || !j.departure_time)
+       )
+      )
+    );
+
+    if (existingInMemory) {
+      return res.json({
+        success: true,
+        reused: true,
+        profile: existingInMemory.profiles || { id: existingInMemory.user_id, name },
+        journey: {
+          id: existingInMemory.id,
+          user_id: existingInMemory.user_id,
+          pickup: { name: existingInMemory.pickup_name || pickup, lat: existingInMemory.pickup_lat, lon: existingInMemory.pickup_lon },
+          drop: { name: existingInMemory.drop_name || drop, lat: existingInMemory.drop_lat, lon: existingInMemory.drop_lon },
+          departure_date: existingInMemory.departure_date || targetDate,
+          departure_time: existingInMemory.departure_time || targetTime,
+          status: existingInMemory.status,
+          bearing_degrees: existingInMemory.bearing_degrees || null,
+          route_distance_km: existingInMemory.route_distance_meters ? Math.round((existingInMemory.route_distance_meters / 1000) * 10) / 10 : null
+        }
+      });
+    }
+
+    try {
+      let queryRes = await supabase
+        .from("journeys")
+        .select(`
+          id, user_id, pickup_name, pickup_lat, pickup_lon, drop_name, drop_lat, drop_lon,
+          departure_date, departure_time, status, bearing_degrees, route_distance_meters,
+          profiles ( id, name )
+        `)
+        .eq("status", "active")
+        .order("created_at", { ascending: false });
+
+      if (queryRes.error && queryRes.error.message.includes("column")) {
+        queryRes = await supabase
+          .from("journeys")
+          .select(`
+            id, user_id, pickup_name, pickup_lat, pickup_lon, drop_name, drop_lat, drop_lon,
+            status, profiles ( id, name )
+          `)
+          .eq("status", "active")
+          .order("created_at", { ascending: false });
+      }
+
+      if (!queryRes.error && Array.isArray(queryRes.data)) {
+        const match = queryRes.data.find(j => {
+          if (j.id === req.body.requesterJourneyId || j.user_id === req.body.userId) return true;
+          const pName = Array.isArray(j.profiles) ? j.profiles[0]?.name : j.profiles?.name;
+          const nameMatch = pName ? pName.toLowerCase() === name.toLowerCase() : true;
+          const pickupMatch = j.pickup_name?.toLowerCase() === pickup.toLowerCase() ||
+            haversineKm(j.pickup_lat, j.pickup_lon, pickupGeo.lat, pickupGeo.lon) <= 0.5;
+          const dropMatch = j.drop_name?.toLowerCase() === drop.toLowerCase() ||
+            haversineKm(j.drop_lat, j.drop_lon, dropGeo.lat, dropGeo.lon) <= 0.5;
+          const dateMatch = !j.departure_date || j.departure_date === targetDate;
+          return nameMatch && pickupMatch && dropMatch && dateMatch;
+        });
+
+        if (match) {
+          return res.json({
+            success: true,
+            reused: true,
+            profile: (Array.isArray(match.profiles) ? match.profiles[0] : match.profiles) || { id: match.user_id, name },
+            journey: {
+              id: match.id,
+              user_id: match.user_id,
+              pickup: { name: match.pickup_name || pickup, lat: match.pickup_lat, lon: match.pickup_lon },
+              drop: { name: match.drop_name || drop, lat: match.drop_lat, lon: match.drop_lon },
+              departure_date: match.departure_date || targetDate,
+              departure_time: match.departure_time || targetTime,
+              status: match.status,
+              bearing_degrees: match.bearing_degrees || null,
+              route_distance_km: match.route_distance_meters ? Math.round((match.route_distance_meters / 1000) * 10) / 10 : null
+            }
+          });
+        }
+      }
+    } catch (e) {
+      console.warn("Supabase check existing journey warning:", e.message);
     }
 
     // Precompute OSRM Route & Bearing
@@ -412,9 +591,6 @@ apiRouter.post("/journeys", async (req, res) => {
       profileId = "u-" + Date.now() + "-" + Math.random().toString(36).substring(2, 7);
       profile = { id: profileId, name };
     }
-
-    const todayStr = new Date().toISOString().split('T')[0];
-    const defaultTimeStr = '08:30:00';
 
     let journeyPayload = {
       user_id: profileId,
@@ -704,7 +880,8 @@ apiRouter.post("/match-search", async (req, res) => {
     const {
       aPickup, aDrop,
       aPickupLat, aPickupLon, aDropLat, aDropLon,
-      searchRadiusKm, departureDate, departureTime
+      searchRadiusKm, departureDate, departureTime,
+      requesterJourneyId, requesterUserId, requesterName
     } = req.body || {};
 
     let aPickupGeo, aDropGeo;
@@ -804,6 +981,18 @@ apiRouter.post("/match-search", async (req, res) => {
       }));
     }
 
+    // EXCLUDE CURRENT USER'S OWN JOURNEY OR IDENTICAL PROFILE SEARCH
+    candidates = candidates.filter(candidate => {
+      if (requesterJourneyId && candidate.id === requesterJourneyId) return false;
+      if (requesterUserId && candidate.user_id === requesterUserId) return false;
+      if (requesterName && candidate.profile_name?.toLowerCase() === requesterName.toLowerCase() &&
+          candidate.pickup_name?.toLowerCase() === aPickup.toLowerCase() &&
+          candidate.drop_name?.toLowerCase() === aDrop.toLowerCase()) {
+        return false;
+      }
+      return true;
+    });
+
     const candidateRetrievalEndNs = process.hrtime.bigint();
     const candidateRetrievalMs = Number(candidateRetrievalEndNs - candidateRetrievalStartNs) / 1e6;
 
@@ -855,16 +1044,28 @@ apiRouter.post("/match-search", async (req, res) => {
           const sharedRouteDistanceKm = Math.round(routeALengthKm * Math.max(shareAB, shareBA) * 10) / 10;
 
           const meetingPoint = findMeetingPoint(lineA, lineB, 1000);
-          const meetingData = meetingPoint
-            ? { found: true, meetingPoint }
-            : { found: false, meetingPoint: null };
+          let meetingData = { found: false, meetingPoint: null };
+          if (meetingPoint) {
+            const fallbackLocality = cleanLocationDisplay(candidate.pickup_name) || cleanLocationDisplay(aPickup);
+            const humanDisplay = await getHumanReadableMeetingPoint(meetingPoint.lat, meetingPoint.lon, fallbackLocality);
+            meetingData = {
+              found: true,
+              meetingPoint: {
+                lat: meetingPoint.lat,
+                lon: meetingPoint.lon,
+                distanceToOtherRouteMeters: meetingPoint.distanceToOtherRouteMeters,
+                display: humanDisplay
+              }
+            };
+          }
 
           matches.push({
             id: candidate.id,
             journey_id: candidate.id,
+            user_id: candidate.user_id,
             name: candidate.profile_name || "Traveler",
-            pickup: candidate.pickup_name,
-            drop: candidate.drop_name,
+            pickup: cleanLocationDisplay(candidate.pickup_name) || candidate.pickup_name,
+            drop: cleanLocationDisplay(candidate.drop_name) || candidate.drop_name,
             departure_date: candidate.departure_date || departureDate || null,
             departure_time: candidate.departure_time || departureTime || null,
             meetingData,

@@ -877,6 +877,33 @@
       cursor: pointer;
     }
 
+    .trust-info-banner {
+      background: #f8fafc;
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 8px 12px;
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .trust-info-banner svg {
+      flex-shrink: 0;
+    }
+
+    .match-score-subtle {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--accent-blue);
+      background: var(--accent-light);
+      padding: 3px 9px;
+      border-radius: 12px;
+      border: 1px solid var(--accent-border);
+    }
+
     /* FOOTER */
     .footer {
       text-align: center;
@@ -1033,6 +1060,10 @@
           <h3 class="results-count-title" id="resultsTitle">Compatible Journeys</h3>
           <span id="telemetryChip" class="telemetry-chip"></span>
         </div>
+        <div class="trust-info-banner">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+          <span>GoTogetherRides checks nearby journeys, route direction and shared road segments before showing a match.</span>
+        </div>
         <div id="resultsList"></div>
       </section>
 
@@ -1122,9 +1153,64 @@
       return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
-    // Set default date to today YYYY-MM-DD
     const todayStr = new Date().toISOString().split('T')[0];
     document.getElementById("departureDate").value = todayStr;
+
+    function formatDateDDMMYYYY(dateStr) {
+      if (!dateStr) return '';
+      if (typeof dateStr === 'string' && /^\d{4}-\d{2}-\d{2}/.test(dateStr)) {
+        const parts = dateStr.split('T')[0].split('-');
+        if (parts.length === 3) {
+          return `${parts[2]}/${parts[1]}/${parts[0]}`;
+        }
+      }
+      const d = new Date(dateStr);
+      if (!isNaN(d.getTime())) {
+        const day = String(d.getDate()).padStart(2, '0');
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const year = d.getFullYear();
+        return `${day}/${month}/${year}`;
+      }
+      return dateStr;
+    }
+
+    function formatTime12H(timeStr) {
+      if (!timeStr) return '08:30 AM';
+      const parts = timeStr.split(':');
+      if (parts.length >= 2) {
+        let hours = parseInt(parts[0], 10);
+        const minutes = parts[1];
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        hours = hours % 12;
+        hours = hours ? hours : 12;
+        return `${hours}:${minutes} ${ampm}`;
+      }
+      return timeStr;
+    }
+
+    function getStoredActiveJourney() {
+      try {
+        const saved = localStorage.getItem("gotogether_active_journey");
+        return saved ? JSON.parse(saved) : null;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function setStoredActiveJourney(journeyObj) {
+      try {
+        if (journeyObj) {
+          localStorage.setItem("gotogether_active_journey", JSON.stringify(journeyObj));
+        } else {
+          localStorage.removeItem("gotogether_active_journey");
+        }
+      } catch (e) {}
+    }
+
+    const initialStored = getStoredActiveJourney();
+    if (initialStored && initialStored.id) {
+      currentUserJourneyId = initialStored.id;
+    }
 
     /*
     ==================================================
@@ -1168,20 +1254,28 @@
 
     function formatCleanArea(item) {
       if (!item) return '';
+      if (typeof item === 'string') {
+        const parts = item.split(',').map(p => p.trim()).filter(Boolean);
+        const filtered = parts
+          .map(p => p.replace(/^Ward\s+\d+\s*/i, '').trim())
+          .filter(p => 
+            Boolean(p) &&
+            !/^\d{5,6}$/.test(p) && 
+            !/^(India|Telangana|Andhra Pradesh)$/i.test(p)
+          );
+        if (filtered.length >= 2) return `${filtered[0]}, ${filtered[1]}`;
+        if (filtered.length === 1) return filtered[0];
+        return parts[0].replace(/^Ward\s+\d+\s*/i, '').trim() || item;
+      }
       const addr = item.address || {};
-
       let name = addr.suburb || addr.neighbourhood || addr.quarter || addr.city_district || addr.amenity || addr.road || addr.historic || addr.leisure;
-
       if (!name && item.display_name) {
         name = item.display_name.split(',')[0].trim();
       }
-
       const city = addr.city || addr.town || addr.village || addr.county || addr.state_district;
-
       if (name && city && !name.toLowerCase().includes(city.toLowerCase())) {
         return `${name}, ${city}`;
       }
-
       return name || (item.display_name ? item.display_name.split(',').slice(0, 2).join(',').trim() : '');
     }
 
@@ -1252,7 +1346,6 @@
 
         if (query.length < 2) return;
 
-        // Loading state
         suggestions.innerHTML = (isPickup ? renderGPSOption() : "") + `
           <div class="suggestion-status">
             <div class="status-spinner"></div>
@@ -1416,23 +1509,26 @@
         }
       });
 
+      const seenIds = new Set();
+
       journeys.forEach(j => {
+        if (!j.id || seenIds.has(j.id) || j.id === currentUserJourneyId) return;
+        seenIds.add(j.id);
         if (!j.pickup_lat || !j.pickup_lon) return;
 
         const personName = (j.profiles && j.profiles.name) ? j.profiles.name : "Traveler";
-        const cleanPickup = formatCleanArea({ display_name: j.pickup_name }) || j.pickup_name;
-        const cleanDrop = formatCleanArea({ display_name: j.drop_name }) || j.drop_name;
+        const cleanPickup = formatCleanArea(j.pickup_name) || j.pickup_name;
+        const cleanDrop = formatCleanArea(j.drop_name) || j.drop_name;
 
-        // Check if candidate matches any calculated route match score
         const matchObj = currentMatches.find(m => m.id === j.id || (m.journey && m.journey.id === j.id));
         const score = matchObj && matchObj.data ? matchObj.data.routeMatchPercent : 0;
         const meeting = matchObj && matchObj.meetingData && matchObj.meetingData.found;
-        const depDate = j.departure_date || "Today";
-        const depTime = j.departure_time ? j.departure_time.substring(0, 5) : "08:30";
+        const depDate = formatDateDDMMYYYY(j.departure_date);
+        const depTime = formatTime12H(j.departure_time);
 
         const markerIcon = L.divIcon({
           className: 'custom-nearby-icon',
-          html: `<div style="width:28px;height:28px;background:#ffffff;border:2px solid ${score > 0 ? '#2563eb' : '#ff6b00'};border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,0.2);font-size:14px;">🚗</div>`,
+          html: `<div style="width:28px;height:28px;background:#ffffff;border:2px solid ${score > 0 ? '#2563eb' : '#94a3b8'};border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,0.2);font-size:14px;">🚗</div>`,
           iconSize: [28, 28],
           iconAnchor: [14, 14]
         });
@@ -1460,14 +1556,15 @@
 
     /*
     ==================================================
-    MAIN MATCH SEARCH & JOURNEY CREATION
+    MAIN MATCH SEARCH & JOURNEY CREATION (IDEMPOTENT)
     ==================================================
     */
 
     async function findPeople() {
-      const name = document.getElementById("name").value.trim() || "Traveler";
+      const nameInput = document.getElementById("name");
       const pickupInput = document.getElementById("pickup");
       const dropInput = document.getElementById("drop");
+      const name = nameInput.value.trim() || "Traveler";
       const pickup = pickupInput.value.trim();
       const drop = dropInput.value.trim();
       const departureDate = document.getElementById("departureDate").value || todayStr;
@@ -1482,20 +1579,33 @@
       const status = document.getElementById("status");
       const results = document.getElementById("results");
 
+      // Double-click protection & humanized loading status
       findBtn.disabled = true;
-      findBtn.innerHTML = `<span>Searching candidates...</span>`;
+      findBtn.innerHTML = `<span>Checking nearby journeys...</span>`;
 
-      status.innerHTML = `<div class="status-spinner"></div><span>Saving journey & calculating spatial route candidates...</span>`;
+      status.innerHTML = `<div class="status-spinner"></div><span>Checking route compatibility...</span>`;
       results.style.display = "none";
       clearRouteLayers();
 
       try {
-        // 1. SAVE USER SCHEDULED JOURNEY
+        const storedJourney = getStoredActiveJourney();
+        const isSameInputs = storedJourney &&
+          storedJourney.name === name &&
+          storedJourney.pickup === pickup &&
+          storedJourney.drop === drop &&
+          storedJourney.departureDate === departureDate &&
+          storedJourney.departureTime === departureTime;
+
+        if (isSameInputs && storedJourney.id) {
+          currentUserJourneyId = storedJourney.id;
+        }
+
         const rawPLat = pickupInput.getAttribute("data-lat");
         const rawPLon = pickupInput.getAttribute("data-lon");
         const rawDLat = dropInput.getAttribute("data-lat");
         const rawDLon = dropInput.getAttribute("data-lon");
 
+        // 1. SAVE / REUSE USER SCHEDULED JOURNEY
         const saveResponse = await fetch("/api/journeys", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -1508,7 +1618,8 @@
             dropLat: rawDLat ? parseFloat(rawDLat) : undefined,
             dropLon: rawDLon ? parseFloat(rawDLon) : undefined,
             departureDate,
-            departureTime
+            departureTime,
+            requesterJourneyId: currentUserJourneyId
           })
         });
 
@@ -1518,12 +1629,22 @@
           throw new Error(saved.error || "Could not save your journey.");
         }
 
-        currentUserJourneyId = saved.journey ? saved.journey.id : null;
+        if (saved.journey && saved.journey.id) {
+          currentUserJourneyId = saved.journey.id;
+          setStoredActiveJourney({
+            id: saved.journey.id,
+            name,
+            pickup,
+            drop,
+            departureDate,
+            departureTime
+          });
+        }
 
-        const aPickupLat = pickupInput.getAttribute("data-lat") || saved.journey.pickup.lat;
-        const aPickupLon = pickupInput.getAttribute("data-lon") || saved.journey.pickup.lon;
-        const aDropLat = dropInput.getAttribute("data-lat") || saved.journey.drop.lat;
-        const aDropLon = dropInput.getAttribute("data-lon") || saved.journey.drop.lon;
+        const aPickupLat = pickupInput.getAttribute("data-lat") || (saved.journey && saved.journey.pickup.lat);
+        const aPickupLon = pickupInput.getAttribute("data-lon") || (saved.journey && saved.journey.pickup.lon);
+        const aDropLat = dropInput.getAttribute("data-lat") || (saved.journey && saved.journey.drop.lat);
+        const aDropLon = dropInput.getAttribute("data-lon") || (saved.journey && saved.journey.drop.lon);
 
         // 2. PRODUCTION MATCH SEARCH WITH SCHEDULE
         const searchResponse = await fetch("/api/match-search", {
@@ -1538,7 +1659,9 @@
             aDropLon,
             searchRadiusKm: selectedRadiusKm,
             departureDate: departureDate,
-            departureTime: departureTime
+            departureTime: departureTime,
+            requesterJourneyId: currentUserJourneyId,
+            requesterName: name
           })
         });
 
@@ -1548,12 +1671,21 @@
           throw new Error(searchData.error || "Candidate search failed.");
         }
 
-        currentMatches = (searchData.matches || []).filter(m => m.id !== saved.journey.id);
+        // Deduplicate match results by journey ID and filter out self-matches
+        const seenMap = new Map();
+        (searchData.matches || []).forEach(m => {
+          const jId = m.id || m.journey_id;
+          if (jId && jId !== currentUserJourneyId && !seenMap.has(jId)) {
+            seenMap.set(jId, m);
+          }
+        });
+
+        currentMatches = Array.from(seenMap.values());
 
         status.innerHTML = '';
         renderMatchResults(currentMatches, searchData.timing);
 
-        // Re-render nearby journey map markers with updated match scores
+        // Re-render nearby map markers with updated match scores
         loadNearbyJourneys();
 
         if (currentMatches.length) {
@@ -1571,7 +1703,7 @@
 
     /*
     ==================================================
-    RENDER MATCH RESULTS (MOBILE OPTIMIZED HIERARCHY)
+    RENDER MATCH RESULTS (HUMAN CONSUMER METRICS & CARDS)
     ==================================================
     */
 
@@ -1583,16 +1715,18 @@
       results.style.display = "block";
 
       if (timing) {
-        telemetryChip.textContent = `Matched in ${timing.totalMs} ms (${timing.candidateCount} evaluated)`;
+        const secDisplay = timing.totalMs >= 1000 ? (timing.totalMs / 1000).toFixed(1) + 's' : Math.round(timing.totalMs) + 'ms';
+        const evaluatedText = `${timing.candidateCount || 0} ${timing.candidateCount === 1 ? 'journey' : 'journeys'} checked`;
+        telemetryChip.textContent = `${evaluatedText} · Match found in ${secDisplay}`;
       } else {
         telemetryChip.textContent = '';
       }
 
       if (!matches || !matches.length) {
         list.innerHTML = `
-          <div class="match-card" style="text-align: center; color: var(--text-muted); padding: 30px 20px;">
-            <p style="font-weight: 700; font-size: 16px; margin-bottom: 4px;">No active matches found nearby.</p>
-            <p style="font-size: 13.5px;">Try expanding your search radius to 10 km or selecting a different departure time.</p>
+          <div class="match-card" style="text-align: center; color: var(--text-muted); padding: 28px 20px;">
+            <p style="font-weight: 700; font-size: 15.5px; margin-bottom: 4px; color: var(--text-heading);">No active matches found going your way right now.</p>
+            <p style="font-size: 13px;">Try expanding your search radius to 10 km or selecting a different departure time.</p>
           </div>
         `;
         return;
@@ -1604,8 +1738,15 @@
         const pickupDist = m.data ? m.data.pickupDistanceKm : 0;
         const sharedDist = m.data ? m.data.sharedRouteDistanceKm : 0;
         const meeting = m.meetingData && m.meetingData.found ? m.meetingData.meetingPoint : null;
-        const depDate = m.departure_date || "Today";
-        const depTime = m.departure_time ? m.departure_time.substring(0, 5) : "08:30";
+
+        const formattedDate = formatDateDDMMYYYY(m.departure_date);
+        const formattedTime = formatTime12H(m.departure_time);
+        const cleanPickup = formatCleanArea(m.pickup);
+        const cleanDrop = formatCleanArea(m.drop);
+
+        const meetingDisplayText = meeting
+          ? (meeting.display || `Meet near ${cleanPickup || 'pickup'}`)
+          : null;
 
         html += `
           <div class="match-card ${idx === 0 ? 'active-match' : ''}" id="matchCard_${idx}" onclick="selectMatch(${idx})">
@@ -1615,30 +1756,30 @@
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent-blue)" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                 ${escapeHtml(m.name || "Traveler")}
               </div>
-              <div class="match-score-badge">${score}% Match</div>
+              <span class="match-score-subtle">${score}% Route Match</span>
             </div>
 
             <div class="match-route-line">
-              <span>${escapeHtml(m.pickup)}</span>
+              <span>${escapeHtml(cleanPickup)}</span>
               <span class="match-route-arrow">→</span>
-              <span>${escapeHtml(m.drop)}</span>
+              <span>${escapeHtml(cleanDrop)}</span>
             </div>
 
             <div class="match-meta-grid">
-              <span class="meta-tag">📅 ${escapeHtml(depDate)} · ${escapeHtml(depTime)}</span>
-              <span class="meta-tag">📍 ${pickupDist} km pickup</span>
-              <span class="meta-tag highlight">🛣️ ${sharedDist} km shared</span>
+              <span class="meta-tag">📅 ${escapeHtml(formattedDate)} · ${escapeHtml(formattedTime)}</span>
+              <span class="meta-tag">📍 Pickup around ${escapeHtml(cleanPickup)}</span>
+              <span class="meta-tag highlight">🛣️ ${sharedDist} km together</span>
             </div>
 
-            ${meeting ? `
+            ${meetingDisplayText ? `
               <div class="meeting-point-box">
-                📍 Meeting Point: ${meeting.lat.toFixed(4)}, ${meeting.lon.toFixed(4)}
+                📍 ${escapeHtml(meetingDisplayText)}
               </div>
             ` : ''}
 
             <div class="match-card-actions" onclick="event.stopPropagation();">
-              <button class="btn-join" id="btnJoin_${idx}" onclick="openConfirmModal(${idx})">Request to Join</button>
-              <button class="btn-view-map" onclick="viewRoute(${idx})">View Route</button>
+              <button class="btn-join" id="btnJoin_${idx}" onclick="openConfirmModal(${idx})">Request to ride together</button>
+              <button class="btn-view-map" onclick="viewRoute(${idx})">View route</button>
             </div>
 
           </div>
@@ -1650,7 +1791,7 @@
 
     /*
     ==================================================
-    MAP ROUTE DRAWING & SELECTION (SURROUNDING CONTEXT PRESERVED)
+    MAP ROUTE DRAWING & SELECTION
     ==================================================
     */
 
@@ -1679,7 +1820,6 @@
       if (idx !== -1) {
         viewRoute(idx);
       } else {
-        // If not in top compatible list, find in activeJourneysData and focus map
         const j = activeJourneysData.find(item => item.id === journeyId);
         if (j && j.pickup_lat && j.pickup_lon) {
           map.setView([j.pickup_lat, j.pickup_lon], 14, { animate: true });
@@ -1718,7 +1858,7 @@
           iconAnchor: [15, 30]
         });
         meetingMarker = L.marker([mp.lat, mp.lon], { icon }).addTo(map)
-          .bindPopup(`<b>Meeting Point</b><br>Suggested pickup coordinate`);
+          .bindPopup(`<b>Meeting Point</b><br>${escapeHtml(mp.display || "Suggested meeting place")}`);
       }
 
       if (routeALayer && routeBLayer) {
@@ -1743,27 +1883,34 @@
       const modal = document.getElementById("confirmModal");
       const summary = document.getElementById("confirmSummaryBox");
 
+      const formattedDate = formatDateDDMMYYYY(m.departure_date);
+      const formattedTime = formatTime12H(m.departure_time);
+      const cleanP = formatCleanArea(m.pickup);
+      const cleanD = formatCleanArea(m.drop);
+      const myP = formatCleanArea(document.getElementById("pickup").value);
+      const myD = formatCleanArea(document.getElementById("drop").value);
+
       summary.innerHTML = `
-        <div class="confirm-row">
-          <span class="confirm-label">Target Driver:</span>
-          <span class="confirm-val">${escapeHtml(m.name || "Traveler")}</span>
+        <div style="margin-bottom: 12px; font-size: 15.5px; font-weight: 800; color: var(--text-heading);">
+          Send request to ${escapeHtml(m.name || "Traveler")}?
         </div>
+        
         <div class="confirm-row">
           <span class="confirm-label">Driver's Route:</span>
-          <span class="confirm-val">${escapeHtml(m.pickup)} → ${escapeHtml(m.drop)}</span>
+          <span class="confirm-val">${escapeHtml(cleanP)} → ${escapeHtml(cleanD)}</span>
         </div>
         <div class="confirm-row">
           <span class="confirm-label">Schedule:</span>
-          <span class="confirm-val">${escapeHtml(m.departure_date || "Today")} at ${escapeHtml(m.departure_time || "08:30")}</span>
+          <span class="confirm-val">${escapeHtml(formattedDate)} · ${escapeHtml(formattedTime)}</span>
         </div>
         <div class="confirm-row" style="margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--border-color);">
           <span class="confirm-label">Your Scheduled Route:</span>
-          <span class="confirm-val">${escapeHtml(document.getElementById("pickup").value)} → ${escapeHtml(document.getElementById("drop").value)}</span>
+          <span class="confirm-val">${escapeHtml(myP)} → ${escapeHtml(myD)}</span>
         </div>
-        <div class="confirm-row">
-          <span class="confirm-label">Route Match Percent:</span>
-          <span class="confirm-val" style="color: var(--accent-blue);">${m.data ? m.data.routeMatchPercent : 0}% Match</span>
-        </div>
+
+        <p style="margin-top: 12px; font-size: 12.5px; color: var(--text-muted); line-height: 1.4;">
+          ${escapeHtml(m.name || "They")} will receive your request. If they accept, the ride will appear in <strong>My Rides</strong>.
+        </p>
       `;
 
       modal.style.display = "flex";
@@ -1813,14 +1960,13 @@
 
         document.getElementById("confirmModal").style.display = "none";
 
-        // Update card UI state
         const idx = currentMatches.indexOf(m);
         if (idx !== -1) {
           const cardBtn = document.getElementById(`btnJoin_${idx}`);
           if (cardBtn) {
             cardBtn.classList.add("sent");
             cardBtn.disabled = true;
-            cardBtn.textContent = "✓ Request Sent";
+            cardBtn.textContent = "✓ Request sent";
           }
         }
 
@@ -1890,7 +2036,7 @@
             ? `<span style="color:var(--status-success); background:var(--status-success-bg); padding:2px 8px; border-radius:10px; font-size:12px;">✓ Accepted</span>`
             : req.status === 'rejected'
             ? `<span style="color:var(--status-danger); background:var(--status-danger-bg); padding:2px 8px; border-radius:10px; font-size:12px;">✕ Declined</span>`
-            : `<span style="color:var(--status-warning); background:var(--status-warning-bg); padding:2px 8px; border-radius:10px; font-size:12px;">⌛ Pending</span>`;
+            : `<span style="color:var(--status-warning); background:var(--status-warning-bg); padding:2px 8px; border-radius:10px; font-size:12px;">⌛ Waiting for response</span>`;
 
           html += `
             <div class="request-card">
@@ -1899,7 +2045,7 @@
                 ${badgeHtml}
               </div>
               <div style="font-size: 13.5px; color: var(--text-body); margin-bottom: 8px;">
-                ${escapeHtml(req.pickup_name)} → ${escapeHtml(req.drop_name)}
+                ${escapeHtml(formatCleanArea(req.pickup_name))} → ${escapeHtml(formatCleanArea(req.drop_name))}
               </div>
               ${req.status === 'pending' && activeTab === 'received' ? `
                 <div style="display: flex; gap: 8px; margin-top: 10px;">
@@ -1961,6 +2107,7 @@
 
       currentMatches = [];
       currentUserJourneyId = null;
+      setStoredActiveJourney(null);
       clearRouteLayers();
       map.setView([17.385, 78.4867], 11);
       loadNearbyJourneys();
