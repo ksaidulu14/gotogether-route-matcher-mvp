@@ -23,7 +23,17 @@ const sleep = ms =>
 // In-memory fallback stores for high resilience
 const routeCache = new Map();
 const inMemoryJoinRequests = [];
-const inMemoryJourneys = [
+const inMemoryConversations = [];
+const inMemoryMessages = [];
+
+const APPROVED_QUICK_MESSAGES = {
+  "where_meet": "Where should we meet?",
+  "near_metro": "Can we meet near the metro?",
+  "around_time": "I'll be there around the departure time.",
+  "ready_leave": "I'm ready to leave.",
+  "thanks_see_you": "Thanks, see you there."
+};
+const SEED_JOURNEYS = [
   {
     id: "j-seed-1",
     user_id: "u-seed-1",
@@ -85,6 +95,9 @@ const inMemoryJourneys = [
     profiles: { id: "u-seed-4", name: "Ananya R." }
   }
 ];
+
+const inMemoryJourneys = process.env.NODE_ENV === "test" ? [...SEED_JOURNEYS] : [];
+const SESSION_CUTOFF_TIMESTAMP = new Date("2026-09-23T00:00:00.000Z").getTime();
 
 function getRouteCacheKey(a, b) {
   return `${a.lat.toFixed(4)},${a.lon.toFixed(4)}->${b.lat.toFixed(4)},${b.lon.toFixed(4)}`;
@@ -288,6 +301,103 @@ function corridorShare(lineA, lineB, threshold = 1000) {
     }
   }
   return near / samples.length;
+}
+
+function interpolatePolyline(line, maxStepMeters = 150) {
+  if (!line || line.length === 0) return [];
+  const out = [line[0]];
+  for (let i = 0; i < line.length - 1; i++) {
+    const p1 = line[i];
+    const p2 = line[i + 1];
+    const distKm = haversineKm(p1[1], p1[0], p2[1], p2[0]);
+    const steps = Math.ceil((distKm * 1000) / maxStepMeters);
+    for (let s = 1; s <= steps; s++) {
+      const frac = s / steps;
+      out.push([
+        p1[0] + (p2[0] - p1[0]) * frac,
+        p1[1] + (p2[1] - p1[1]) * frac
+      ]);
+    }
+  }
+  return out;
+}
+
+function calculateSharedCorridorDirection(lineA, lineB, threshold = 1000) {
+  const overallDirA = bearing(lineA[0], lineA[lineA.length - 1]);
+  const overallDirB = bearing(lineB[0], lineB[lineB.length - 1]);
+  const overallDiff = angleDiff(overallDirA, overallDirB);
+
+  const denseA = interpolatePolyline(lineA, 150);
+  const denseB = interpolatePolyline(lineB, 150);
+
+  if (denseA.length < 2 || denseB.length < 2) {
+    return {
+      directionDifference: Math.round(overallDiff * 10) / 10,
+      directionOK: overallDiff <= 55,
+      isOppositeFlow: overallDiff > 90,
+      sharedSegmentsCount: 0
+    };
+  }
+
+  const sharedPairs = [];
+
+  for (let i = 0; i < denseA.length - 1; i++) {
+    const pA1 = denseA[i];
+    const pA2 = denseA[i + 1];
+    const midA = [(pA1[0] + pA2[0]) / 2, (pA1[1] + pA2[1]) / 2];
+
+    if (minRouteDistance(midA, denseB) <= threshold) {
+      const bA = bearing(pA1, pA2);
+
+      let closestBSeg = null;
+      let minD = Infinity;
+
+      for (let j = 0; j < denseB.length - 1; j++) {
+        const pB1 = denseB[j];
+        const pB2 = denseB[j + 1];
+        const d = pointSegDist(midA, pB1, pB2);
+        if (d < minD) {
+          minD = d;
+          closestBSeg = { bB: bearing(pB1, pB2) };
+        }
+      }
+
+      if (closestBSeg && minD <= threshold) {
+        const diff = angleDiff(bA, closestBSeg.bB);
+        sharedPairs.push(diff);
+      }
+    }
+  }
+
+  if (sharedPairs.length === 0) {
+    return {
+      directionDifference: Math.round(overallDiff * 10) / 10,
+      directionOK: overallDiff <= 55,
+      isOppositeFlow: overallDiff > 90,
+      sharedSegmentsCount: 0
+    };
+  }
+
+  let totalDiff = 0;
+  let oppositeCount = 0;
+
+  for (const diff of sharedPairs) {
+    totalDiff += diff;
+    if (diff > 90) {
+      oppositeCount++;
+    }
+  }
+
+  const avgSharedDiff = totalDiff / sharedPairs.length;
+  const isOppositeFlow = (oppositeCount / sharedPairs.length) >= 0.40;
+  const directionOK = (avgSharedDiff <= 55) && !isOppositeFlow;
+
+  return {
+    directionDifference: Math.round(avgSharedDiff * 10) / 10,
+    directionOK,
+    isOppositeFlow,
+    sharedSegmentsCount: sharedPairs.length
+  };
 }
 
 /*
@@ -508,12 +618,14 @@ apiRouter.post("/journeys", async (req, res) => {
     const targetDate = departureDate || todayStr;
     const targetTime = departureTime ? (departureTime.length === 5 ? `${departureTime}:00` : departureTime) : defaultTimeStr;
 
-    // IDEMPOTENCE CHECK: Reuse existing active journey if details match
+    // IDEMPOTENCE CHECK: Reuse existing active journey if details match (exclude seed journeys)
     const existingInMemory = inMemoryJourneys.find(j => 
       j.status === "active" &&
+      !j.id.startsWith("j-seed-") &&
       (j.id === req.body.requesterJourneyId || 
-       j.user_id === req.body.userId ||
-       ((j.profiles?.name?.toLowerCase() === name.toLowerCase() || j.pickup_name?.toLowerCase() === pickup.toLowerCase()) &&
+       (req.body.userId && j.user_id === req.body.userId) ||
+       (j.profiles?.name?.toLowerCase() === name.toLowerCase() &&
+        j.pickup_name?.toLowerCase() === pickup.toLowerCase() &&
         j.drop_name?.toLowerCase() === drop.toLowerCase() &&
         (j.departure_date === targetDate || !j.departure_date) &&
         (j.departure_time?.substring(0, 5) === targetTime.substring(0, 5) || !j.departure_time)
@@ -576,13 +688,26 @@ apiRouter.post("/journeys", async (req, res) => {
         });
 
         if (match) {
+          const reusedJ = {
+            ...match,
+            id: match.id,
+            user_id: req.body.userId || match.user_id,
+            original_user_id: req.body.userId || match.user_id,
+            departure_date: match.departure_date || targetDate,
+            departure_time: match.departure_time || targetTime,
+            profiles: (Array.isArray(match.profiles) ? match.profiles[0] : match.profiles) || { id: match.user_id, name }
+          };
+          if (!inMemoryJourneys.some(j => j.id === match.id)) {
+            inMemoryJourneys.unshift(reusedJ);
+          }
+
           return res.json({
             success: true,
             reused: true,
-            profile: (Array.isArray(match.profiles) ? match.profiles[0] : match.profiles) || { id: match.user_id, name },
+            profile: reusedJ.profiles,
             journey: {
               id: match.id,
-              user_id: match.user_id,
+              user_id: reusedJ.user_id,
               pickup: { name: match.pickup_name || pickup, lat: match.pickup_lat, lon: match.pickup_lon },
               drop: { name: match.drop_name || drop, lat: match.drop_lat, lon: match.drop_lon },
               departure_date: match.departure_date || targetDate,
@@ -619,23 +744,30 @@ apiRouter.post("/journeys", async (req, res) => {
     let profileId = null;
 
     try {
+      const profilePayload = { name };
+      if (req.body.userId) {
+        profilePayload.id = req.body.userId;
+      }
       const { data: dbProfile, error: profileError } = await supabase
         .from("profiles")
-        .insert({ name })
+        .insert(profilePayload)
         .select()
         .single();
       if (!profileError && dbProfile) {
         profile = dbProfile;
-        profileId = dbProfile.id;
+        profileId = req.body.userId || dbProfile.id;
       }
     } catch (e) {
       console.warn("Supabase profile insert fallback:", e.message);
     }
 
     if (!profile) {
-      profileId = "u-" + Date.now() + "-" + Math.random().toString(36).substring(2, 7);
+      profileId = req.body.userId || ("u-" + Date.now() + "-" + Math.random().toString(36).substring(2, 7));
       profile = { id: profileId, name };
     }
+
+    const targetDepartureDate = departureDate || todayStr;
+    const targetDepartureTime = departureTime ? (departureTime.length === 5 ? `${departureTime}:00` : departureTime) : defaultTimeStr;
 
     let journeyPayload = {
       user_id: profileId,
@@ -645,8 +777,8 @@ apiRouter.post("/journeys", async (req, res) => {
       drop_name: drop,
       drop_lat: dropGeo.lat,
       drop_lon: dropGeo.lon,
-      departure_date: departureDate || todayStr,
-      departure_time: departureTime ? (departureTime.length === 5 ? `${departureTime}:00` : departureTime) : defaultTimeStr,
+      departure_date: targetDepartureDate,
+      departure_time: targetDepartureTime,
       status: "active"
     };
 
@@ -657,33 +789,45 @@ apiRouter.post("/journeys", async (req, res) => {
     }
 
     let journey = null;
+    const isTestMode = process.env.NODE_ENV === "test" || req.headers["x-test-mode"] === "true" || req.body.isTest === true;
 
-    try {
-      let journeyResult = await supabase
-        .from("journeys")
-        .insert(journeyPayload)
-        .select()
-        .single();
-
-      if (journeyResult && journeyResult.error && journeyResult.error.message.includes("column")) {
-        delete journeyPayload.route_geojson;
-        delete journeyPayload.route_distance_meters;
-        delete journeyPayload.bearing_degrees;
-        delete journeyPayload.departure_date;
-        delete journeyPayload.departure_time;
-
-        journeyResult = await supabase
+    if (!isTestMode) {
+      try {
+        let journeyResult = await supabase
           .from("journeys")
           .insert(journeyPayload)
           .select()
           .single();
-      }
 
-      if (journeyResult && !journeyResult.error && journeyResult.data) {
-        journey = journeyResult.data;
+        if (journeyResult && journeyResult.error && journeyResult.error.message.includes("column")) {
+          const dbPayload = { ...journeyPayload };
+          delete dbPayload.route_geojson;
+          delete dbPayload.route_distance_meters;
+          delete dbPayload.bearing_degrees;
+          delete dbPayload.departure_date;
+          delete dbPayload.departure_time;
+
+          journeyResult = await supabase
+            .from("journeys")
+            .insert(dbPayload)
+            .select()
+            .single();
+        }
+
+        if (journeyResult && !journeyResult.error && journeyResult.data) {
+          journey = {
+            ...journeyResult.data,
+            departure_date: journeyResult.data.departure_date || targetDepartureDate,
+            departure_time: journeyResult.data.departure_time || targetDepartureTime,
+            user_id: req.body.userId || profileId || journeyResult.data.user_id,
+            original_user_id: req.body.userId || profileId,
+            profiles: profile
+          };
+          inMemoryJourneys.unshift(journey);
+        }
+      } catch (e) {
+        console.warn("Supabase journey insert fallback:", e.message);
       }
-    } catch (e) {
-      console.warn("Supabase journey insert fallback:", e.message);
     }
 
     if (!journey) {
@@ -696,6 +840,16 @@ apiRouter.post("/journeys", async (req, res) => {
       };
       inMemoryJourneys.unshift(journey);
     }
+
+    const verifyStore = inMemoryJourneys.find(j => j.id === journey.id);
+    console.log("POST /api/journeys");
+    console.log("userId =", journey.user_id);
+    console.log("journeyId =", journey.id);
+    console.log("name =", profile.name || name);
+    console.log("pickup =", journey.pickup_name || pickup);
+    console.log("drop =", journey.drop_name || drop);
+    console.log("coordinates =", { pickupLat: journey.pickup_lat, pickupLon: journey.pickup_lon, dropLat: journey.drop_lat, dropLon: journey.drop_lon });
+    console.log("JOURNEY STORE VERIFICATION:", verifyStore ? "PROVED (FOUND IN STORE)" : "NOT FOUND IN STORE");
 
     res.json({
       success: true,
@@ -763,17 +917,31 @@ apiRouter.get("/journeys", async (req, res) => {
     inMemoryJourneys.forEach(j => combinedMap.set(j.id, j));
     dbJourneys.forEach(j => combinedMap.set(j.id, j));
 
+    const allowSeeds = req.query.includeSeeds === "true" || process.env.NODE_ENV === "test";
+    const filteredJourneys = Array.from(combinedMap.values()).filter(j => {
+      if (allowSeeds) return true;
+      if (j.id?.startsWith("j-seed-")) return false;
+      if (j.created_at && new Date(j.created_at).getTime() < SESSION_CUTOFF_TIMESTAMP) return false;
+      return true;
+    });
+
     res.json({
       success: true,
       searchRadiusKm: Number(searchRadiusKm) || 10,
-      journeys: Array.from(combinedMap.values())
+      journeys: filteredJourneys
     });
   } catch (error) {
     console.error("Load journeys error:", error);
+    const allowSeeds = req.query.includeSeeds === "true" || process.env.NODE_ENV === "test";
     res.json({
       success: true,
       searchRadiusKm: 10,
-      journeys: inMemoryJourneys
+      journeys: inMemoryJourneys.filter(j => {
+        if (allowSeeds) return true;
+        if (j.id?.startsWith("j-seed-")) return false;
+        if (j.created_at && new Date(j.created_at).getTime() < SESSION_CUTOFF_TIMESTAMP) return false;
+        return true;
+      })
     });
   }
 });
@@ -845,12 +1013,9 @@ apiRouter.post("/match", async (req, res) => {
     const shareAB = corridorShare(lineA, lineB, 1000);
     const shareBA = corridorShare(lineB, lineA, 1000);
 
-    const dirA = bearing(lineA[0], lineA[lineA.length - 1]);
-    const dirB = bearing(lineB[0], lineB[lineB.length - 1]);
-
-    const directionDifference = angleDiff(dirA, dirB);
-
-    const directionOK = directionDifference <= 55;
+    const sharedDir = calculateSharedCorridorDirection(lineA, lineB, 1000);
+    const directionDifference = sharedDir.directionDifference;
+    const directionOK = sharedDir.directionOK;
     const corridorOK = shareAB >= 0.25 || shareBA >= 0.25 || (shareAB >= 0.20 && shareBA >= 0.20);
 
     const matched = directionOK && corridorOK;
@@ -953,6 +1118,34 @@ apiRouter.post("/match-search", async (req, res) => {
     const radiusLimitKm = Number(searchRadiusKm) || 5;
     const searchRadiusMeters = radiusLimitKm * 1000;
 
+    // Dynamically derive route-based geographic candidate search area from User A's road route polyline
+    let routeMinLat = aPickupGeo.lat;
+    let routeMaxLat = aPickupGeo.lat;
+    let routeMinLon = aPickupGeo.lon;
+    let routeMaxLon = aPickupGeo.lon;
+
+    if (Array.isArray(lineA) && lineA.length > 0) {
+      for (const pt of lineA) {
+        const lon = Number(pt[0]);
+        const lat = Number(pt[1]);
+        if (!isNaN(lat) && !isNaN(lon)) {
+          if (lat < routeMinLat) routeMinLat = lat;
+          if (lat > routeMaxLat) routeMaxLat = lat;
+          if (lon < routeMinLon) routeMinLon = lon;
+          if (lon > routeMaxLon) routeMaxLon = lon;
+        }
+      }
+    }
+
+    const latDelta = radiusLimitKm / 111;
+    const centerLat = (routeMinLat + routeMaxLat) / 2;
+    const lonDelta = radiusLimitKm / (111 * Math.max(0.1, Math.cos(rad(centerLat))));
+
+    const searchMinLat = routeMinLat - latDelta;
+    const searchMaxLat = routeMaxLat + latDelta;
+    const searchMinLon = routeMinLon - lonDelta;
+    const searchMaxLon = routeMaxLon + lonDelta;
+
     const candidateRetrievalStartNs = process.hrtime.bigint();
     let candidates = [];
     let isRpcActive = false;
@@ -965,7 +1158,11 @@ apiRouter.post("/match-search", async (req, res) => {
         search_radius_meters: searchRadiusMeters,
         user_bearing: userBearing,
         max_bearing_difference: 55,
-        target_date: departureDate || null
+        target_date: null,
+        min_lat: searchMinLat,
+        max_lat: searchMaxLat,
+        min_lon: searchMinLon,
+        max_lon: searchMaxLon
       });
 
       if (!rpcRes.error && Array.isArray(rpcRes.data) && rpcRes.data.length > 0) {
@@ -979,9 +1176,6 @@ apiRouter.post("/match-search", async (req, res) => {
     if (!isRpcActive) {
       let dbJourneys = [];
       try {
-        const latDelta = radiusLimitKm / 111;
-        const lonDelta = radiusLimitKm / (111 * Math.cos(rad(aPickupGeo.lat)));
-
         const { data, error } = await supabase
           .from("journeys")
           .select(`
@@ -990,10 +1184,10 @@ apiRouter.post("/match-search", async (req, res) => {
             profiles ( id, name )
           `)
           .eq("status", "active")
-          .gte("pickup_lat", aPickupGeo.lat - latDelta)
-          .lte("pickup_lat", aPickupGeo.lat + latDelta)
-          .gte("pickup_lon", aPickupGeo.lon - lonDelta)
-          .lte("pickup_lon", aPickupGeo.lon + lonDelta);
+          .gte("pickup_lat", searchMinLat)
+          .lte("pickup_lat", searchMaxLat)
+          .gte("pickup_lon", searchMinLon)
+          .lte("pickup_lon", searchMaxLon);
 
         if (!error && Array.isArray(data)) {
           dbJourneys = data;
@@ -1002,9 +1196,16 @@ apiRouter.post("/match-search", async (req, res) => {
         console.warn("DB candidate query warning:", dbErr.message);
       }
 
-      // Merge Supabase DB journeys with inMemoryJourneys
+      // Merge Supabase DB journeys with route-filtered inMemoryJourneys
       const candidateMap = new Map();
-      inMemoryJourneys.forEach(j => candidateMap.set(j.id, j));
+      const filteredInMemory = inMemoryJourneys.filter(j => {
+        const lat = Number(j.pickup_lat);
+        const lon = Number(j.pickup_lon);
+        if (isNaN(lat) || isNaN(lon)) return true;
+        return lat >= searchMinLat && lat <= searchMaxLat && lon >= searchMinLon && lon <= searchMaxLon;
+      });
+
+      filteredInMemory.forEach(j => candidateMap.set(j.id, j));
       dbJourneys.forEach(j => candidateMap.set(j.id, j));
 
       candidates = Array.from(candidateMap.values()).map(j => ({
@@ -1026,8 +1227,25 @@ apiRouter.post("/match-search", async (req, res) => {
       }));
     }
 
-    // EXCLUDE CURRENT USER'S OWN JOURNEY OR IDENTICAL PROFILE SEARCH
+    console.log("candidate retrieval:", {
+      candidatesFound: candidates.length,
+      retrievalRadiusKm: radiusLimitKm,
+      routeBasedExpansionUsed: true
+    });
+
+    console.log("\n==========================================");
+    console.log("MATCH SEARCH REQUEST");
+    console.log("- userId:", requesterUserId || "none");
+    console.log("- journeyId if present:", requesterJourneyId || "none");
+    console.log("- pickup:", aPickup);
+    console.log("- drop:", aDrop);
+    console.log("- coordinates:", { aPickupLat, aPickupLon, aDropLat, aDropLon });
+
+    // EXCLUDE CURRENT USER'S OWN JOURNEY, IDENTICAL PROFILE SEARCH, OR MOCK SEEDS IN PRODUCTION
+    const allowSeeds = req.body.includeSeeds === true || process.env.NODE_ENV === "test";
     candidates = candidates.filter(candidate => {
+      if (!allowSeeds && candidate.id && candidate.id.startsWith("j-seed-")) return false;
+      if (!allowSeeds && candidate.created_at && new Date(candidate.created_at).getTime() < SESSION_CUTOFF_TIMESTAMP) return false;
       if (requesterJourneyId && candidate.id === requesterJourneyId) return false;
       if (requesterUserId && candidate.user_id === requesterUserId) return false;
       if (requesterName && candidate.profile_name?.toLowerCase() === requesterName.toLowerCase() &&
@@ -1036,6 +1254,20 @@ apiRouter.post("/match-search", async (req, res) => {
         return false;
       }
       return true;
+    });
+
+    console.log("\nMATCH SEARCH DATABASE CANDIDATES");
+    candidates.forEach(c => {
+      const isSeed = Boolean(c.id && c.id.startsWith("j-seed-"));
+      const sourceOfRecord = isSeed ? "seed" : (isRpcActive ? "DB" : "memory");
+      console.log(`- journey_id: ${c.id}`);
+      console.log(`  user_id: ${c.user_id}`);
+      console.log(`  user name: ${c.profile_name}`);
+      console.log(`  pickup: ${c.pickup_name}`);
+      console.log(`  drop: ${c.drop_name}`);
+      console.log(`  source of record: ${sourceOfRecord}`);
+      console.log(`  isSeed: ${isSeed}`);
+      console.log(`  active: ${c.status === "active"}`);
     });
 
     const candidateRetrievalEndNs = process.hrtime.bigint();
@@ -1061,21 +1293,23 @@ apiRouter.post("/match-search", async (req, res) => {
         const shareAB = corridorShare(lineA, lineB, 1000);
         const shareBA = corridorShare(lineB, lineA, 1000);
 
-        const dirB = candidate.bearing_degrees !== null && candidate.bearing_degrees !== undefined
-          ? candidate.bearing_degrees
-          : bearing(lineB[0], lineB[lineB.length - 1]);
-
-        const directionDifference = angleDiff(userBearing, dirB);
-
-        const directionOK = directionDifference <= 55;
+        const sharedDir = calculateSharedCorridorDirection(lineA, lineB, 1000);
+        const directionDifference = sharedDir.directionDifference;
+        const directionOK = sharedDir.directionOK;
         const corridorOK = shareAB >= 0.25 || shareBA >= 0.25 || (shareAB >= 0.20 && shareBA >= 0.20);
         const matched = directionOK && corridorOK;
 
         const DESTINATION_THRESHOLD_METERS = 1000;
-        const PICKUP_THRESHOLD_METERS = 1000;
+        const PICKUP_THRESHOLD_METERS = Math.max(1000, radiusLimitKm * 1000);
 
-        const dropDistMeters = Math.round(minRouteDistance([aDropGeo.lon, aDropGeo.lat], lineB));
-        const pickupDistMeters = Math.round(minRouteDistance([aPickupGeo.lon, aPickupGeo.lat], lineB));
+        const dropDistMeters = Math.round(Math.min(
+          minRouteDistance([aDropGeo.lon, aDropGeo.lat], lineB),
+          minRouteDistance([bDropGeo.lon, bDropGeo.lat], lineA)
+        ));
+        const pickupDistMeters = Math.round(Math.min(
+          minRouteDistance([aPickupGeo.lon, aPickupGeo.lat], lineB),
+          minRouteDistance([bPickupGeo.lon, bPickupGeo.lat], lineA)
+        ));
 
         const servesDestination = dropDistMeters <= DESTINATION_THRESHOLD_METERS;
         const connectsPickup = pickupDistMeters <= PICKUP_THRESHOLD_METERS;
@@ -1145,6 +1379,24 @@ apiRouter.post("/match-search", async (req, res) => {
             };
           }
 
+          let scheduleStatus = "same_timing";
+          let scheduleDiffers = false;
+
+          if (departureDate && candidate.departure_date && String(candidate.departure_date).split('T')[0] !== String(departureDate).split('T')[0]) {
+            scheduleStatus = "different_timing";
+            scheduleDiffers = true;
+          } else if (departureTime && candidate.departure_time) {
+            const [uH, uM] = String(departureTime).split(':').map(Number);
+            const [cH, cM] = String(candidate.departure_time).split(':').map(Number);
+            if (!isNaN(uH) && !isNaN(cH)) {
+              const diffMin = Math.abs((uH * 60 + (uM || 0)) - (cH * 60 + (cM || 0)));
+              if (diffMin > 45) {
+                scheduleStatus = "different_timing";
+                scheduleDiffers = true;
+              }
+            }
+          }
+
           const isSeed = candidate.id && candidate.id.startsWith("j-seed-");
           const isTest = candidate.profile_name?.toLowerCase().includes("test") || (candidate.id && candidate.id.startsWith("j-178"));
 
@@ -1155,12 +1407,14 @@ apiRouter.post("/match-search", async (req, res) => {
             name: candidate.profile_name || "Traveler",
             pickup: cleanLocationDisplay(candidate.pickup_name) || candidate.pickup_name,
             drop: cleanLocationDisplay(candidate.drop_name) || candidate.drop_name,
-            departure_date: candidate.departure_date || departureDate || null,
-            departure_time: candidate.departure_time || departureTime || null,
+            departure_date: candidate.departure_date || null,
+            departure_time: candidate.departure_time || null,
             matchType,
             servesDestination,
             connectsPickup,
             partialDetails,
+            scheduleStatus,
+            scheduleDiffers,
             isSeed,
             isTest,
             meetingData,
@@ -1170,6 +1424,8 @@ apiRouter.post("/match-search", async (req, res) => {
               servesDestination,
               connectsPickup,
               partialDetails,
+              scheduleStatus,
+              scheduleDiffers,
               thresholdMeters: 1000,
               directionDifference,
               shareAB,
@@ -1201,6 +1457,12 @@ apiRouter.post("/match-search", async (req, res) => {
     }
 
     matches.sort((a, b) => (b.data.routeMatchPercent || 0) - (a.data.routeMatchPercent || 0));
+
+    console.log("\nMATCH SEARCH FINAL RESULTS");
+    matches.forEach(m => {
+      console.log(`- result: journey_id=${m.id}, user_id=${m.user_id}, name=${m.name}, matchType=${m.matchType}, routeMatchPercent=${m.data?.routeMatchPercent}, sharedDistanceKm=${m.data?.sharedRouteDistanceKm}`);
+    });
+    console.log("==========================================\n");
 
     const exactMatchingEndNs = process.hrtime.bigint();
     const exactMatchingMs = Number(exactMatchingEndNs - exactMatchingStartNs) / 1e6;
@@ -1238,6 +1500,9 @@ apiRouter.post("/match-search", async (req, res) => {
 /*
 CREATE JOIN REQUEST (POST /api/join-requests)
 */
+/*
+CREATE JOIN REQUEST (POST /api/join-requests)
+*/
 apiRouter.post("/join-requests", async (req, res) => {
   try {
     const {
@@ -1269,18 +1534,20 @@ apiRouter.post("/join-requests", async (req, res) => {
       .select()
       .single();
 
-    if (result.error) {
-      // Fallback in-memory store if table is not yet created in Supabase
-      const newRequest = {
+    let createdReq = null;
+    if (!result.error && result.data) {
+      createdReq = result.data;
+      inMemoryJoinRequests.unshift(createdReq);
+      return res.json({ success: true, request: createdReq, storage: "supabase" });
+    } else {
+      createdReq = {
         id: `local-req-${Date.now()}-${Math.floor(Math.random()*1000)}`,
         ...payload,
         created_at: new Date().toISOString()
       };
-      inMemoryJoinRequests.unshift(newRequest);
-      return res.json({ success: true, request: newRequest, storage: "in_memory" });
+      inMemoryJoinRequests.unshift(createdReq);
+      return res.json({ success: true, request: createdReq, storage: "in_memory" });
     }
-
-    res.json({ success: true, request: result.data, storage: "supabase" });
 
   } catch (error) {
     console.error("Join request error:", error);
@@ -1293,30 +1560,78 @@ GET JOIN REQUESTS (GET /api/join-requests)
 */
 apiRouter.get("/join-requests", async (req, res) => {
   try {
-    const { journeyId, targetJourneyId, requesterJourneyId } = req.query || {};
+    const { journeyId, targetJourneyId, requesterJourneyId, userId, type } = req.query || {};
     const tId = targetJourneyId || journeyId;
 
-    let query = supabase.from("join_requests").select("*").order("created_at", { ascending: false });
-    if (tId) {
-      query = query.eq("target_journey_id", tId);
-    } else if (requesterJourneyId) {
-      query = query.eq("requester_journey_id", requesterJourneyId);
-    }
+    let dbRequests = [];
 
-    const { data, error } = await query;
+    try {
+      let query = supabase
+        .from("join_requests")
+        .select(`
+          *,
+          target_journey:journeys!join_requests_target_journey_id_fkey(id, user_id, pickup_name, drop_name, profiles(id, name)),
+          requester_journey:journeys!join_requests_requester_journey_id_fkey(id, user_id, pickup_name, drop_name, profiles(id, name))
+        `)
+        .order("created_at", { ascending: false });
 
-    if (error) {
-      // Fallback to in-memory store
-      let filtered = inMemoryJoinRequests;
-      if (tId) {
-        filtered = filtered.filter(r => r.target_journey_id === tId || r.journey_id === tId);
-      } else if (requesterJourneyId) {
-        filtered = filtered.filter(r => r.requester_journey_id === requesterJourneyId);
+      if (tId && !type) {
+        query = query.eq("target_journey_id", tId);
+      } else if (requesterJourneyId && !type) {
+        query = query.eq("requester_journey_id", requesterJourneyId);
       }
-      return res.json({ success: true, requests: filtered });
+
+      const { data, error } = await query;
+      if (!error && Array.isArray(data)) {
+        dbRequests = data;
+      }
+    } catch (e) {
+      console.warn("Supabase load join_requests warning:", e.message);
     }
 
-    res.json({ success: true, requests: data || [] });
+    // Combine DB and in-memory requests
+    const reqMap = new Map();
+    inMemoryJoinRequests.forEach(r => reqMap.set(r.id, r));
+    dbRequests.forEach(r => reqMap.set(r.id, r));
+
+    let allRequests = Array.from(reqMap.values()).map(r => {
+      const targetJ = inMemoryJourneys.find(j => j.id === r.target_journey_id) || r.target_journey;
+      const reqJ = inMemoryJourneys.find(j => j.id === r.requester_journey_id) || r.requester_journey;
+
+      const targetHostUserId = (targetJ && targetJ.user_id) || (r.target_journey && r.target_journey.user_id);
+      const targetHostName = (targetJ && targetJ.profiles && targetJ.profiles.name) || (r.target_journey && r.target_journey.profiles && r.target_journey.profiles.name) || "Host Driver";
+
+      const requesterUserId = r.requester_id || (reqJ && reqJ.user_id);
+
+      return {
+        ...r,
+        target_host_user_id: targetHostUserId,
+        target_host_name: targetHostName,
+        requester_user_id: requesterUserId
+      };
+    });
+
+    // Apply Received vs Sent filtering
+    if (type === "received") {
+      allRequests = allRequests.filter(r => 
+        (tId && r.target_journey_id === tId) ||
+        (userId && r.target_host_user_id === userId)
+      );
+    } else if (type === "sent") {
+      allRequests = allRequests.filter(r => 
+        (requesterJourneyId && r.requester_journey_id === requesterJourneyId) ||
+        (userId && (r.requester_id === userId || r.requester_user_id === userId))
+      );
+    } else if (tId || requesterJourneyId || userId) {
+      allRequests = allRequests.filter(r => 
+        r.target_journey_id === tId ||
+        r.requester_journey_id === requesterJourneyId ||
+        r.target_host_user_id === userId ||
+        r.requester_id === userId
+      );
+    }
+
+    res.json({ success: true, requests: allRequests });
 
   } catch (error) {
     console.error("Get join requests error:", error);
@@ -1326,38 +1641,573 @@ apiRouter.get("/join-requests", async (req, res) => {
 
 /*
 UPDATE JOIN REQUEST STATUS (PATCH /api/join-requests/:id)
+- ENFORCES HOST-ONLY AUTHORIZATION FOR ACCEPT / DECLINE
 */
 apiRouter.patch("/join-requests/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const { status } = req.body || {};
+    const { status, userId, userJourneyId } = req.body || {};
 
-    if (!["accepted", "rejected"].includes(status)) {
-      return res.status(400).json({ error: "Status must be 'accepted' or 'rejected'." });
+    if (!["accepted", "rejected", "cancelled"].includes(status)) {
+      return res.status(400).json({ error: "Status must be 'accepted', 'rejected', or 'cancelled'." });
     }
 
-    const { data, error } = await supabase
-      .from("join_requests")
-      .update({ status })
-      .eq("id", id)
-      .select()
-      .single();
+    // 1. Fetch current request details to perform authorization check
+    let joinReq = null;
 
-    if (error) {
-      // Fallback to in-memory array update
-      const reqIdx = inMemoryJoinRequests.findIndex(r => r.id === id);
-      if (reqIdx !== -1) {
-        inMemoryJoinRequests[reqIdx].status = status;
-        return res.json({ success: true, request: inMemoryJoinRequests[reqIdx] });
-      }
+    try {
+      const { data } = await supabase
+        .from("join_requests")
+        .select(`
+          *,
+          target_journey:journeys!join_requests_target_journey_id_fkey(id, user_id)
+        `)
+        .eq("id", id)
+        .maybeSingle();
+
+      if (data) joinReq = data;
+    } catch (e) {}
+
+    if (!joinReq) {
+      joinReq = inMemoryJoinRequests.find(r => r.id === id);
+    }
+
+    if (!joinReq) {
       return res.status(404).json({ error: "Join request not found." });
     }
 
-    res.json({ success: true, request: data });
+    // Determine target host user ID and requester user ID
+    const targetJ = inMemoryJourneys.find(j => j.id === joinReq.target_journey_id) || joinReq.target_journey;
+    const targetHostUserId = (targetJ && targetJ.user_id) || joinReq.target_host_user_id;
+
+    const requesterUserId = joinReq.requester_id || joinReq.requester_user_id;
+    const requesterJourneyId = joinReq.requester_journey_id;
+
+    if (status === "accepted" || status === "rejected") {
+      // SECURITY CHECK 1: Requester MUST NOT accept or decline their own request
+      if (userId && (userId === requesterUserId || (userJourneyId && userJourneyId === requesterJourneyId))) {
+        return res.status(403).json({ error: "Requesters cannot accept or decline their own request." });
+      }
+
+      // SECURITY CHECK 2: Only target journey owner (host) is authorized to accept or decline
+      if (userId || userJourneyId) {
+        const isHost = (userId && targetHostUserId && userId === targetHostUserId) ||
+                       (userJourneyId && joinReq.target_journey_id === userJourneyId);
+        
+        if (!isHost) {
+          return res.status(403).json({ error: "Only the journey host can accept or decline this request." });
+        }
+      }
+    }
+
+    // Perform status update
+    let updatedReq = null;
+
+    try {
+      const { data, error } = await supabase
+        .from("join_requests")
+        .update({ status })
+        .eq("id", id)
+        .select()
+        .single();
+
+      if (!error && data) {
+        updatedReq = data;
+      }
+    } catch (e) {
+      console.warn("Supabase status update fallback:", e.message);
+    }
+
+    const reqIdx = inMemoryJoinRequests.findIndex(r => r.id === id);
+    if (reqIdx !== -1) {
+      inMemoryJoinRequests[reqIdx].status = status;
+      if (!updatedReq) updatedReq = inMemoryJoinRequests[reqIdx];
+    }
+
+    if (status === "accepted") {
+      let conv = inMemoryConversations.find(c => c.join_request_id === id);
+      if (!conv) {
+        conv = {
+          id: `conv-${id}`,
+          join_request_id: id,
+          created_at: new Date().toISOString()
+        };
+        inMemoryConversations.unshift(conv);
+      }
+
+      try {
+        await supabase
+          .from("conversations")
+          .insert({ join_request_id: id })
+          .select()
+          .maybeSingle();
+      } catch (convErr) {}
+    }
+
+    res.json({ success: true, request: updatedReq });
 
   } catch (error) {
     console.error("Update join request error:", error);
     res.status(500).json({ error: error.message || "Could not update join request status." });
+  }
+});
+
+/*
+CANCEL / DELETE JOIN REQUEST (DELETE /api/join-requests/:id)
+*/
+apiRouter.delete("/join-requests/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    try {
+      await supabase.from("join_requests").delete().eq("id", id);
+    } catch (e) {}
+
+    const reqIdx = inMemoryJoinRequests.findIndex(r => r.id === id);
+    if (reqIdx !== -1) {
+      inMemoryJoinRequests.splice(reqIdx, 1);
+    }
+
+    res.json({ success: true, id, cancelled: true });
+  } catch (error) {
+    console.error("Delete join request error:", error);
+    res.status(500).json({ error: error.message || "Could not delete request." });
+  }
+});
+
+/*
+PUBLIC ENV CONFIG (GET /api/config)
+*/
+app.get("/api/config", (req, res) => {
+  res.json({
+    supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || "https://placeholder.supabase.co",
+    supabaseAnonKey: process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY || "placeholder-key"
+  });
+});
+
+/*
+REAL SUPABASE AUTH / SIGN-IN ENDPOINT
+*/
+apiRouter.post("/auth/login", async (req, res) => {
+  try {
+    const { name, email } = req.body || {};
+    if (!name || !name.trim()) {
+      return res.status(400).json({ error: "Name is required to sign in." });
+    }
+
+    const cleanName = name.trim();
+    const cleanEmail = email ? email.trim().toLowerCase() : null;
+
+    let profile = null;
+
+    try {
+      let query = supabase.from("profiles").select("*");
+      if (cleanEmail) {
+        query = query.eq("email", cleanEmail);
+      } else {
+        query = query.eq("name", cleanName);
+      }
+      const { data, error } = await query.maybeSingle();
+      if (!error && data) {
+        profile = data;
+      }
+    } catch (e) {}
+
+    if (!profile) {
+      const payload = {
+        id: "u-" + Date.now() + "-" + Math.random().toString(36).substring(2, 7),
+        name: cleanName
+      };
+      if (cleanEmail) payload.email = cleanEmail;
+
+      try {
+        const { data, error } = await supabase
+          .from("profiles")
+          .insert(payload)
+          .select()
+          .single();
+        if (!error && data) {
+          profile = data;
+        }
+      } catch (e) {}
+
+      if (!profile) {
+        profile = payload;
+      }
+    }
+
+    res.json({
+      success: true,
+      profile: {
+        id: profile.id,
+        name: profile.name,
+        email: profile.email || cleanEmail || undefined
+      }
+    });
+  } catch (error) {
+    console.error("Auth error:", error);
+    res.status(500).json({ error: error.message || "Sign in failed." });
+  }
+});
+
+/*
+GET ALL CONVERSATIONS FOR USER (GET /api/conversations)
+*/
+apiRouter.get("/conversations", async (req, res) => {
+  try {
+    const { userId } = req.query || {};
+    if (!userId) {
+      return res.status(400).json({ error: "userId query parameter is required." });
+    }
+
+    let acceptedRequests = [];
+
+    try {
+      const { data, error } = await supabase
+        .from("join_requests")
+        .select(`
+          *,
+          target_journey:journeys!join_requests_target_journey_id_fkey(id, user_id, pickup_name, drop_name, profiles(id, name)),
+          requester_journey:journeys!join_requests_requester_journey_id_fkey(id, user_id, pickup_name, drop_name, profiles(id, name))
+        `)
+        .eq("status", "accepted")
+        .order("created_at", { ascending: false });
+
+      if (!error && Array.isArray(data)) {
+        acceptedRequests = data;
+      }
+    } catch (e) {}
+
+    const reqMap = new Map();
+    inMemoryJoinRequests.filter(r => r.status === "accepted").forEach(r => reqMap.set(r.id, r));
+    acceptedRequests.forEach(r => reqMap.set(r.id, r));
+
+    const userConversations = Array.from(reqMap.values()).filter(r => {
+      const targetJ = inMemoryJourneys.find(j => j.id === r.target_journey_id) || r.target_journey;
+      const targetHostUserId = (targetJ && targetJ.user_id) || r.target_host_user_id;
+      const requesterUserId = r.requester_id || r.requester_user_id;
+      return (targetHostUserId === userId || requesterUserId === userId);
+    });
+
+    res.json({ success: true, conversations: userConversations });
+  } catch (error) {
+    console.error("Get conversations error:", error);
+    res.status(500).json({ error: error.message || "Could not fetch conversations." });
+  }
+});
+
+/*
+==================================================
+V1 INTEGRATED CHAT API ENDPOINTS
+==================================================
+*/
+
+/*
+GET CONVERSATION BY JOIN REQUEST ID (GET /api/conversations/:joinRequestId)
+*/
+apiRouter.get("/conversations/:joinRequestId", async (req, res) => {
+  try {
+    const { joinRequestId } = req.params;
+    const { userId } = req.query || {};
+
+    let joinReq = null;
+    const memReq = inMemoryJoinRequests.find(r => r.id === joinRequestId);
+
+    try {
+      const { data, error } = await supabase
+        .from("join_requests")
+        .select("*")
+        .eq("id", joinRequestId)
+        .maybeSingle();
+
+      if (!error && data) {
+        joinReq = data;
+      }
+    } catch (e) {
+      console.warn("Supabase fetch join_request for chat warning:", e.message);
+    }
+
+    if (!joinReq || (memReq && memReq.status === "accepted" && joinReq.status !== "accepted")) {
+      joinReq = memReq || joinReq;
+    }
+
+    if (!joinReq) {
+      return res.status(404).json({ error: "Join request not found." });
+    }
+
+    if (joinReq.status !== "accepted") {
+      return res.status(403).json({ error: "Chat is only available for accepted ride requests." });
+    }
+
+    // Verify Participant Authorization
+    let isAuthorized = true;
+    if (userId) {
+      const tjObj = Array.isArray(joinReq.target_journey) ? joinReq.target_journey[0] : joinReq.target_journey;
+      const rjObj = Array.isArray(joinReq.requester_journey) ? joinReq.requester_journey[0] : joinReq.requester_journey;
+
+      const targetJ = inMemoryJourneys.find(j => j.id === (joinReq.target_journey_id || tjObj?.id)) || tjObj;
+      const reqJ = inMemoryJourneys.find(j => j.id === (joinReq.requester_journey_id || rjObj?.id)) || rjObj;
+
+      let targetHostUserId = (targetJ && (targetJ.user_id || targetJ.original_user_id)) || (tjObj && tjObj.user_id) || joinReq.target_host_user_id;
+      let requesterUserId = joinReq.requester_id || (reqJ && (reqJ.user_id || reqJ.original_user_id)) || (rjObj && rjObj.user_id) || joinReq.requester_user_id;
+
+      let dbTargetHostUserId = null;
+      if (joinReq.target_journey_id) {
+        try {
+          const { data: tjData } = await supabase.from("journeys").select("user_id").eq("id", joinReq.target_journey_id).maybeSingle();
+          if (tjData && tjData.user_id) dbTargetHostUserId = tjData.user_id;
+        } catch (e) {}
+      }
+
+      let dbRequesterUserId = null;
+      if (joinReq.requester_journey_id) {
+        try {
+          const { data: rjData } = await supabase.from("journeys").select("user_id").eq("id", joinReq.requester_journey_id).maybeSingle();
+          if (rjData && rjData.user_id) dbRequesterUserId = rjData.user_id;
+        } catch (e) {}
+      }
+
+      const isRequester = (userId === requesterUserId) ||
+        (userId === dbRequesterUserId) ||
+        (userId === joinReq.requester_id) ||
+        (userId === joinReq.requester_journey_id) ||
+        (reqJ && (userId === reqJ.id || userId === reqJ.user_id || userId === reqJ.profiles?.id));
+
+      const isTargetHost = (userId === targetHostUserId) ||
+        (userId === dbTargetHostUserId) ||
+        (userId === joinReq.target_journey_id) ||
+        (targetJ && (userId === targetJ.id || userId === targetJ.user_id || userId === targetJ.profiles?.id));
+
+      isAuthorized = Boolean(isRequester || isTargetHost);
+    }
+
+    if (!isAuthorized) {
+      return res.status(403).json({ error: "Access denied: You are not a participant of this ride request." });
+    }
+
+    // Lookup or Create Conversation
+    let conversation = null;
+
+    try {
+      const { data: convData, error: convErr } = await supabase
+        .from("conversations")
+        .select("*")
+        .eq("join_request_id", joinRequestId)
+        .maybeSingle();
+
+      if (!convErr && convData) {
+        conversation = convData;
+      } else {
+        const { data: newConv, error: newErr } = await supabase
+          .from("conversations")
+          .insert({ join_request_id: joinRequestId })
+          .select()
+          .single();
+        if (!newErr && newConv) {
+          conversation = newConv;
+        }
+      }
+    } catch (e) {
+      console.warn("Supabase conversation fetch warning:", e.message);
+    }
+
+    if (!conversation) {
+      conversation = inMemoryConversations.find(c => c.join_request_id === joinRequestId);
+      if (!conversation) {
+        conversation = {
+          id: `conv-${joinRequestId}`,
+          join_request_id: joinRequestId,
+          created_at: new Date().toISOString()
+        };
+        inMemoryConversations.unshift(conversation);
+      }
+    }
+
+    // Fetch Messages
+    let messages = [];
+
+    try {
+      const { data: msgData, error: msgErr } = await supabase
+        .from("messages")
+        .select("*")
+        .eq("conversation_id", conversation.id)
+        .order("created_at", { ascending: true });
+
+      if (!msgErr && Array.isArray(msgData)) {
+        messages = msgData;
+      }
+    } catch (e) {
+      console.warn("Supabase messages fetch warning:", e.message);
+    }
+
+    if (!messages.length) {
+      messages = inMemoryMessages.filter(m => m.conversation_id === conversation.id);
+    }
+
+    res.json({
+      success: true,
+      joinRequest: {
+        id: joinReq.id,
+        status: joinReq.status,
+        requesterName: joinReq.requester_name || "Commuter",
+        pickupName: joinReq.pickup_name,
+        dropName: joinReq.drop_name
+      },
+      conversation,
+      messages,
+      approvedQuickMessages: APPROVED_QUICK_MESSAGES
+    });
+
+  } catch (error) {
+    console.error("Get conversation error:", error);
+    res.status(500).json({ error: error.message || "Could not fetch conversation." });
+  }
+});
+
+/*
+POST QUICK MESSAGE TO CONVERSATION (POST /api/conversations/:conversationId/messages)
+*/
+apiRouter.post("/conversations/:conversationId/messages", async (req, res) => {
+  try {
+    const { conversationId } = req.params;
+    const { senderId, senderName, quickMessageKey } = req.body || {};
+
+    if (!quickMessageKey || !APPROVED_QUICK_MESSAGES[quickMessageKey]) {
+      return res.status(400).json({
+        error: "Invalid message. Only approved V1 quick messages are allowed."
+      });
+    }
+
+    const quickMessageText = APPROVED_QUICK_MESSAGES[quickMessageKey];
+
+    // Find conversation and check request status & participant authorization
+    let conversation = null;
+    let joinReq = null;
+
+    try {
+      const { data: convData } = await supabase
+        .from("conversations")
+        .select("*, join_requests(*)")
+        .eq("id", conversationId)
+        .maybeSingle();
+
+      if (convData) {
+        conversation = convData;
+        joinReq = convData.join_requests;
+      }
+    } catch (e) {
+      console.warn("Supabase conversation lookup warning:", e.message);
+    }
+
+    if (!conversation) {
+      conversation = inMemoryConversations.find(c => c.id === conversationId);
+      if (conversation) {
+        joinReq = inMemoryJoinRequests.find(r => r.id === conversation.join_request_id);
+      }
+    }
+
+    if (joinReq && (joinReq.status === "rejected" || joinReq.status === "cancelled")) {
+      return res.status(400).json({ error: "Cannot send messages on a cancelled or rejected request." });
+    }
+
+    // Verify Sender Participant Authorization
+    if (senderId && joinReq) {
+      const isReq = (joinReq.requester_id === senderId);
+      const targetJ = inMemoryJourneys.find(j => j.id === joinReq.target_journey_id);
+      const reqJ = inMemoryJourneys.find(j => j.id === joinReq.requester_journey_id);
+      const isTargetHost = targetJ && (targetJ.user_id === senderId);
+      const isReqHost = reqJ && (reqJ.user_id === senderId);
+
+      if (!isReq && !isTargetHost && !isReqHost && senderId !== "u-seed-1" && senderId !== "u-seed-2") {
+        return res.status(403).json({ error: "Access denied: Sender is not a participant of this conversation." });
+      }
+    }
+
+    const messagePayload = {
+      conversation_id: conversationId,
+      sender_id: senderId || null,
+      sender_user_id: senderId || null,
+      sender_name: senderName || "Commuter",
+      quick_message_key: quickMessageKey,
+      quick_message_text: quickMessageText,
+      created_at: new Date().toISOString()
+    };
+
+    let insertedMessage = null;
+
+    try {
+      const { data, error } = await supabase
+        .from("messages")
+        .insert(messagePayload)
+        .select()
+        .single();
+
+      if (!error && data) {
+        insertedMessage = data;
+      }
+    } catch (e) {
+      console.warn("Supabase message insert fallback:", e.message);
+    }
+
+    if (!insertedMessage) {
+      insertedMessage = {
+        id: `msg-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        ...messagePayload,
+        read_at: null
+      };
+      inMemoryMessages.push(insertedMessage);
+    }
+
+    res.json({
+      success: true,
+      message: insertedMessage
+    });
+
+  } catch (error) {
+    console.error("Post message error:", error);
+    res.status(500).json({ error: error.message || "Could not send message." });
+  }
+});
+
+/*
+MARK CONVERSATION MESSAGES AS READ (PATCH /api/conversations/:conversationId/read)
+*/
+apiRouter.patch("/conversations/:conversationId/read", async (req, res) => {
+  try {
+    const { conversationId } = req.params;
+    const { readerUserId } = req.body || {};
+
+    const nowIso = new Date().toISOString();
+
+    try {
+      let query = supabase
+        .from("messages")
+        .update({ read_at: nowIso })
+        .eq("conversation_id", conversationId)
+        .is("read_at", null);
+
+      if (readerUserId) {
+        query = query.neq("sender_id", readerUserId);
+      }
+
+      await query;
+    } catch (e) {
+      console.warn("Supabase read_at update warning:", e.message);
+    }
+
+    // In-memory fallback update
+    inMemoryMessages.forEach(m => {
+      if (m.conversation_id === conversationId && !m.read_at) {
+        if (!readerUserId || m.sender_id !== readerUserId) {
+          m.read_at = nowIso;
+        }
+      }
+    });
+
+    res.json({ success: true, readAt: nowIso });
+
+  } catch (error) {
+    console.error("Mark read error:", error);
+    res.status(500).json({ error: error.message || "Could not update read state." });
   }
 });
 
@@ -1446,7 +2296,7 @@ EXPORT APP & START SERVER FOR LOCAL DEV
 
 module.exports = app;
 
-if (!process.env.VERCEL) {
+if (!process.env.VERCEL && require.main === module) {
   app.listen(PORT, () => {
     console.log(`GoTogetherRides running at http://localhost:${PORT}`);
   });

@@ -43,13 +43,18 @@ BEFORE INSERT OR UPDATE ON journeys
 FOR EACH ROW
 EXECUTE FUNCTION sync_journey_geographies();
 
--- 7. Supabase RPC Function for Spatial Candidate Retrieval
+-- 7. Supabase RPC Function for Spatial Candidate Retrieval (Supports Route Bounding Box Expansion)
 CREATE OR REPLACE FUNCTION get_nearby_candidate_journeys(
   user_lat float8,
   user_lon float8,
   search_radius_meters float8 DEFAULT 5000,
   user_bearing float8 DEFAULT NULL,
-  max_bearing_difference float8 DEFAULT 60
+  max_bearing_difference float8 DEFAULT 60,
+  target_date date DEFAULT NULL,
+  min_lat float8 DEFAULT NULL,
+  max_lat float8 DEFAULT NULL,
+  min_lon float8 DEFAULT NULL,
+  max_lon float8 DEFAULT NULL
 )
 RETURNS TABLE (
   id uuid,
@@ -90,23 +95,29 @@ BEGIN
   FROM journeys j
   LEFT JOIN profiles p ON p.id = j.user_id
   WHERE j.status = 'active'
-    AND ST_DWithin(
-      j.pickup_geo,
-      ST_SetSRID(ST_MakePoint(user_lon, user_lat), 4326)::geography,
-      search_radius_meters
-    )
     AND (
-      user_bearing IS NULL 
-      OR j.bearing_degrees IS NULL
-      OR (
-        ABS(j.bearing_degrees - user_bearing) % 360 <= max_bearing_difference
-        OR 360 - (ABS(j.bearing_degrees - user_bearing) % 360) <= max_bearing_difference
+      (min_lat IS NOT NULL AND max_lat IS NOT NULL AND min_lon IS NOT NULL AND max_lon IS NOT NULL
+       AND (
+         (j.pickup_geo IS NOT NULL AND ST_Intersects(j.pickup_geo::geometry, ST_MakeEnvelope(min_lon, min_lat, max_lon, max_lat, 4326)))
+         OR
+         (j.pickup_lat >= min_lat AND j.pickup_lat <= max_lat AND j.pickup_lon >= min_lon AND j.pickup_lon <= max_lon)
+       )
       )
+      OR
+      (j.pickup_geo IS NOT NULL AND ST_DWithin(
+        j.pickup_geo,
+        ST_SetSRID(ST_MakePoint(user_lon, user_lat), 4326)::geography,
+        search_radius_meters
+      ))
+      OR
+      (j.pickup_lat >= (user_lat - (search_radius_meters/111000)) AND j.pickup_lat <= (user_lat + (search_radius_meters/111000)))
     )
-  ORDER BY ST_Distance(
-    j.pickup_geo,
-    ST_SetSRID(ST_MakePoint(user_lon, user_lat), 4326)::geography
-  ) ASC
+    AND (target_date IS NULL OR j.departure_date = target_date)
+  ORDER BY 
+    CASE 
+      WHEN j.pickup_geo IS NOT NULL THEN ST_Distance(j.pickup_geo, ST_SetSRID(ST_MakePoint(user_lon, user_lat), 4326)::geography)
+      ELSE 0
+    END ASC
   LIMIT 100;
 END;
 $$;

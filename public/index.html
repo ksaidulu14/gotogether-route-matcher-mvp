@@ -15,6 +15,12 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
 
+  <!-- Firebase Cloud Messaging (FCM) SDK & Registration Layer -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/js/fcm.js" defer></script>
+
   <style>
     :root {
       --bg-page: #f8fafc;
@@ -58,6 +64,7 @@
     body {
       font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       background-color: var(--bg-page);
+      background-image: radial-gradient(circle at 50% 0%, #eff6ff 0%, #f8fafc 75%);
       color: var(--text-body);
       line-height: 1.5;
       -webkit-font-smoothing: antialiased;
@@ -165,25 +172,18 @@
 
     /* MAIN APP CONTAINER */
     .app-main {
-      max-width: 1200px;
+      max-width: 920px;
       width: 100%;
       margin: 0 auto;
-      padding: 24px 20px 60px;
+      padding: 24px 16px 60px;
       flex: 1;
     }
 
-    /* RESPONSIVE LAYOUT GRID */
+    /* SINGLE COLUMN CENTRAL CONTAINER */
     .app-grid {
-      display: grid;
-      grid-template-columns: 1fr;
+      display: flex;
+      flex-direction: column;
       gap: 24px;
-    }
-
-    @media (min-width: 900px) {
-      .app-grid {
-        grid-template-columns: 430px 1fr;
-        align-items: start;
-      }
     }
 
     /* RIDE PLANNING CARD */
@@ -191,7 +191,7 @@
       background: var(--surface-card);
       border: 1px solid var(--border-color);
       border-radius: var(--radius-lg);
-      padding: 24px;
+      padding: 28px 24px;
       box-shadow: var(--shadow-sm);
     }
 
@@ -307,9 +307,60 @@
       padding-right: 14px;
     }
 
-    input:focus {
+    input:focus, select:focus {
       border-color: var(--border-focus);
       box-shadow: 0 0 0 3px rgba(29, 78, 216, 0.1);
+    }
+
+    /* USER ROUTE SUMMARY BAR */
+    .user-route-summary-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      background: var(--surface-hero);
+      border: 1px solid #bfdbfe;
+      border-radius: var(--radius-md);
+      font-size: 13px;
+      color: var(--text-heading);
+    }
+
+    .user-route-summary-bar .summary-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn-edit-route {
+      background: #ffffff;
+      border: 1px solid var(--border-color);
+      color: var(--route-my);
+      font-size: 12px;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .btn-edit-route:hover {
+      background: var(--surface-subtle);
+      border-color: #bfdbfe;
+    }
+
+    .flexibility-select {
+      width: 100%;
+      height: 44px;
+      padding: 0 14px;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      font-family: inherit;
+      font-size: 13.5px;
+      font-weight: 600;
+      color: var(--text-heading);
+      background: #ffffff;
+      outline: none;
+      cursor: pointer;
     }
 
     .field-row-split {
@@ -577,6 +628,152 @@
     .btn-secondary:hover {
       background: var(--surface-subtle);
       color: var(--text-heading);
+    }
+
+    /* QUICK TIME CHIPS */
+    .time-quick-chips {
+      display: flex;
+      gap: 6px;
+      margin-top: 8px;
+      flex-wrap: wrap;
+    }
+
+    .time-chip {
+      padding: 4px 10px;
+      font-size: 11.5px;
+      font-weight: 700;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      background: #ffffff;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .time-chip:hover {
+      background: var(--surface-hero);
+      color: var(--route-my);
+      border-color: #bfdbfe;
+    }
+
+    /* V1 INTEGRATED CHAT STYLES */
+    .chat-box-card {
+      margin-top: 14px;
+      background: #ffffff;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .chat-header-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 10px;
+    }
+
+    .chat-title-text {
+      font-size: 14px;
+      font-weight: 800;
+      color: var(--text-heading);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .chat-messages-container {
+      max-height: 220px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 8px 4px;
+      background: var(--bg-page);
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border-color);
+    }
+
+    .chat-bubble {
+      max-width: 82%;
+      padding: 8px 12px;
+      border-radius: 12px;
+      font-size: 13px;
+      line-height: 1.35;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .chat-bubble-me {
+      align-self: flex-end;
+      background: var(--route-my);
+      color: #ffffff;
+      border-bottom-right-radius: 3px;
+    }
+
+    .chat-bubble-other {
+      align-self: flex-start;
+      background: #ffffff;
+      color: var(--text-heading);
+      border: 1px solid var(--border-color);
+      border-bottom-left-radius: 3px;
+    }
+
+    .chat-msg-sender {
+      font-size: 10.5px;
+      font-weight: 700;
+      margin-bottom: 2px;
+      opacity: 0.85;
+    }
+
+    .chat-msg-meta {
+      font-size: 10px;
+      align-self: flex-end;
+      margin-top: 4px;
+      opacity: 0.75;
+    }
+
+    .quick-messages-section {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding-top: 6px;
+    }
+
+    .quick-msg-label {
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .quick-msg-chips-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .quick-msg-pill {
+      background: var(--surface-hero);
+      color: var(--route-my);
+      border: 1px solid #bfdbfe;
+      padding: 6px 12px;
+      border-radius: 16px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      text-align: left;
+    }
+
+    .quick-msg-pill:hover, .quick-msg-pill:active {
+      background: var(--route-my);
+      color: #ffffff;
+      border-color: var(--route-my);
     }
 
     /* RIGHT COLUMN CONTAINERS */
@@ -1090,25 +1287,174 @@
       cursor: default;
     }
 
-    /* SKELETON LOADING */
-    .skeleton-box {
-      background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
-      background-size: 200% 100%;
-      animation: skeletonPulse 1.5s infinite;
-      border-radius: 8px;
+    /* MORE OPTIONS COLLAPSIBLE DRAWER */
+    .btn-more-options {
+      width: 100%;
+      height: 38px;
+      background: var(--surface-subtle);
+      border: 1px dashed var(--border-color);
+      color: var(--route-my);
+      border-radius: var(--radius-md);
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+      margin-top: 4px;
     }
 
-    @keyframes skeletonPulse {
-      0% { background-position: 200% 0; }
-      100% { background-position: -200% 0; }
+    .btn-more-options:hover {
+      background: var(--route-my-light);
+      border-color: #bfdbfe;
     }
 
-    .skeleton-card {
+    .more-options-box {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      padding: 16px;
+      background: var(--surface-subtle);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      margin-top: 6px;
+    }
+
+    /* SCHEDULE DIFFERENT BADGE */
+    .schedule-diff-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background: #fef3c7;
+      color: #92400e;
+      border: 1px solid #fde68a;
+      font-size: 11.5px;
+      font-weight: 700;
+      padding: 3px 10px;
+      border-radius: 12px;
+      white-space: nowrap;
+    }
+
+    /* DISCOVERY ROUTE LOADING CARD */
+    .discovery-loading-card {
+      background: #ffffff;
+      border: 1px solid #bfdbfe;
+      border-radius: var(--radius-lg);
+      padding: 24px 20px;
+      box-shadow: var(--shadow-sm);
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .discovery-loading-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .spinner-sm {
+      width: 22px;
+      height: 22px;
+      border: 3px solid #bfdbfe;
+      border-top-color: var(--route-my);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .discovery-title {
+      font-size: 15px;
+      font-weight: 800;
+      color: var(--text-heading);
+    }
+
+    .discovery-steps {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding-left: 34px;
+    }
+
+    .discovery-step {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13.5px;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    .step-done {
+      color: var(--route-shared);
+      font-weight: 700;
+    }
+
+    .step-check {
+      font-size: 14px;
+      font-weight: 800;
+      color: var(--route-shared);
+    }
+
+    .step-active {
+      color: var(--route-my);
+      font-weight: 700;
+    }
+
+    .step-pulse {
+      color: var(--route-my);
+      animation: pulseDot 1s infinite alternate;
+    }
+
+    @keyframes pulseDot {
+      from { opacity: 0.3; }
+      to { opacity: 1; }
+    }
+
+    /* NO-MATCH EXPERIENCE CARD */
+    .no-match-card {
       background: #ffffff;
       border: 1px solid var(--border-color);
       border-radius: var(--radius-lg);
-      padding: 20px;
-      margin-bottom: 14px;
+      padding: 32px 24px;
+      text-align: center;
+      box-shadow: var(--shadow-sm);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .no-match-icon {
+      font-size: 36px;
+    }
+
+    .no-match-title {
+      font-size: 17px;
+      font-weight: 800;
+      color: var(--text-heading);
+      letter-spacing: -0.01em;
+    }
+
+    .no-match-sub {
+      font-size: 13.5px;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .no-match-highlight {
+      font-size: 14.5px;
+      font-weight: 700;
+      color: var(--route-my);
+      background: var(--route-my-light);
+      padding: 8px 16px;
+      border-radius: 20px;
+      border: 1px solid #bfdbfe;
     }
 
     /* MODALS */
@@ -1278,13 +1624,19 @@
         </div>
         <div class="brand-text-container">
           <span class="brand-name">GoTogether</span>
-          <span class="brand-tagline">First match the journeys. Then solve the ride.</span>
+          <span class="brand-tagline">Same routes. Brighter days.</span>
         </div>
       </a>
-      <div class="nav-actions">
+      <div class="nav-actions" style="display:flex; gap:8px; align-items:center;">
+        <button id="btnConversationsModal" class="btn-trips-modal" style="display:inline-flex;">
+          <span>💬 Chats</span>
+        </button>
         <button id="btnTripsModal" class="btn-trips-modal">
           <span>🚗 My Rides</span>
           <span id="tripsCountBadge" class="badge-count" style="display:none;">0</span>
+        </button>
+        <button id="btnAuthModal" class="btn-trips-modal" style="background:var(--route-my-light); color:var(--route-my); border-color:#bfdbfe;">
+          <span id="authBtnLabel">Sign In</span>
         </button>
       </div>
     </div>
@@ -1302,7 +1654,7 @@
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--route-my)" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
             Your Commute
           </h1>
-          <p class="planner-subtitle">Specify your route to find commuters sharing your exact journey.</p>
+          <p class="planner-subtitle">Tell us your route and we'll find people going your way.</p>
         </div>
 
         <div class="form-grid">
@@ -1344,9 +1696,21 @@
             <div id="dropSuggestions" class="suggestions"></div>
           </div>
 
+          <!-- EMBEDDED REAL LEAFLET MAP CARD -->
+          <section class="map-card" id="mapCard">
+            <div id="userRouteSummaryCard" class="user-route-summary-bar">
+              <div class="summary-left">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--route-my)" stroke-width="2.2"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>
+                <span id="userRouteSummaryText">Select pickup and drop to see your route.</span>
+              </div>
+              <button type="button" id="btnEditRoute" class="btn-edit-route">Edit route</button>
+            </div>
+            <div id="map"></div>
+          </section>
+
           <!-- TRAVEL DAYS PILLS -->
           <div class="field">
-            <label class="field-label">Travel Days</label>
+            <label class="field-label">When do you usually travel?</label>
             <div class="days-pill-group" id="daysPillGroup">
               <button type="button" class="day-pill active" data-day="Mon">Mon</button>
               <button type="button" class="day-pill active" data-day="Tue">Tue</button>
@@ -1358,58 +1722,87 @@
             </div>
           </div>
 
-          <!-- TRAVEL TIME & DATE -->
+          <!-- TRAVEL TIME & FLEXIBILITY -->
           <div class="field-row-split">
             <div class="field">
-              <label class="field-label" for="departureTime">Travel Time</label>
+              <label class="field-label" for="departureTime">Departure Time</label>
               <div class="input-wrapper">
                 <div class="input-icon">
                   <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                 </div>
                 <input id="departureTime" type="time" value="08:30">
               </div>
+              <div class="time-quick-chips">
+                <button type="button" class="time-chip" onclick="setDepartureTime('08:00')">08:00 AM</button>
+                <button type="button" class="time-chip" onclick="setDepartureTime('08:30')">08:30 AM</button>
+                <button type="button" class="time-chip" onclick="setDepartureTime('09:00')">09:00 AM</button>
+                <button type="button" class="time-chip" onclick="setDepartureTime('17:30')">05:30 PM</button>
+                <button type="button" class="time-chip" onclick="setDepartureTime('18:00')">06:00 PM</button>
+              </div>
             </div>
 
             <div class="field">
-              <label class="field-label" for="departureDate">Travel Date</label>
-              <div class="input-wrapper">
-                <div class="input-icon">
-                  <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+              <label class="field-label" for="flexibilitySelect">Time Flexibility</label>
+              <select id="flexibilitySelect" class="flexibility-select">
+                <option value="15">± 15 mins</option>
+                <option value="30" selected>± 30 mins</option>
+                <option value="45">± 45 mins</option>
+                <option value="60">± 60 mins</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- + MORE OPTIONS TOGGLE & COLLAPSIBLE CONTAINER -->
+          <div>
+            <button type="button" id="btnToggleMoreOptions" class="btn-more-options">
+              <span>+ More options</span>
+            </button>
+
+            <div id="moreOptionsDrawer" class="more-options-box" style="display: none;">
+              <!-- STARTING DATE -->
+              <div class="field">
+                <label class="field-label" for="departureDate">Starting From</label>
+                <div class="input-wrapper">
+                  <div class="input-icon">
+                    <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                  </div>
+                  <input id="departureDate" type="date">
                 </div>
-                <input id="departureDate" type="date">
               </div>
-            </div>
-          </div>
 
-          <!-- RETURN JOURNEY TOGGLE -->
-          <div class="toggle-row">
-            <div class="toggle-info">
-              <span class="toggle-label-title">Return journey</span>
-              <span class="toggle-label-sub">Match both onward & return commute</span>
-            </div>
-            <label class="switch">
-              <input type="checkbox" id="returnJourneyToggle">
-              <span class="slider"></span>
-            </label>
-          </div>
+              <!-- RETURN JOURNEY TOGGLE -->
+              <div class="toggle-row">
+                <div class="toggle-info">
+                  <span class="toggle-label-title">Return journey</span>
+                  <span class="toggle-label-sub">Match both onward & return commute</span>
+                </div>
+                <label class="switch">
+                  <input type="checkbox" id="returnJourneyToggle">
+                  <span class="slider"></span>
+                </label>
+              </div>
 
-          <!-- VEHICLE PREFERENCE -->
-          <div class="field">
-            <label class="field-label">Vehicle Preference</label>
-            <div class="segmented-group" id="vehicleSegmentedGroup">
-              <button type="button" class="segment-btn active" data-vehicle="Any">Any</button>
-              <button type="button" class="segment-btn" data-vehicle="Car">Car</button>
-              <button type="button" class="segment-btn" data-vehicle="Bike">Bike</button>
-              <button type="button" class="segment-btn" data-vehicle="Scooter">Scooter</button>
-            </div>
-          </div>
+              <!-- VEHICLE PREFERENCE -->
+              <div class="field">
+                <label class="field-label">What's your ride?</label>
+                <div class="segmented-group" id="vehicleSegmentedGroup">
+                  <button type="button" class="segment-btn active" data-vehicle="Any">Any</button>
+                  <button type="button" class="segment-btn" data-vehicle="Car">Car</button>
+                  <button type="button" class="segment-btn" data-vehicle="Bike">Bike</button>
+                  <button type="button" class="segment-btn" data-vehicle="Scooter">Scooter</button>
+                </div>
+              </div>
 
-          <!-- SEARCH RADIUS SEGMENT -->
-          <div class="field">
-            <label class="field-label">Search Radius</label>
-            <div class="segmented-group">
-              <button type="button" class="radius-btn active" data-radius="5">5 km Radius</button>
-              <button type="button" class="radius-btn" data-radius="10">10 km Radius</button>
+              <!-- SEARCH RADIUS SEGMENT (HUMAN WORDING) -->
+              <div class="field">
+                <label class="field-label">How far can you travel to meet?</label>
+                <div class="segmented-group">
+                  <button type="button" class="radius-btn" data-radius="2">2 km</button>
+                  <button type="button" class="radius-btn active" data-radius="5">5 km</button>
+                  <button type="button" class="radius-btn" data-radius="10">10 km</button>
+                  <button type="button" class="radius-btn" data-radius="15">15 km</button>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -1421,53 +1814,24 @@
             <button id="clear" class="btn-secondary" type="button">Clear</button>
           </div>
 
+          <!-- TRUST / PRIVACY NOTE -->
+          <p style="font-size: 11.5px; color: var(--text-muted); text-align: center; margin-top: 10px; display: flex; align-items: center; justify-content: center; gap: 5px;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <span>Your data is safe with us. We only use it to find better matches.</span>
+          </p>
+
         </div>
       </section>
 
-      <!-- RIGHT COLUMN: ROUTE MAP & MATCH RESULTS -->
-      <div class="results-pane">
+      <!-- ROUTE CONVERGENCE & MATCH RESULTS CONTAINER -->
+      <section class="results-card" id="results">
 
-        <!-- MAP CARD -->
-        <section class="map-card" id="mapCard">
-          <div id="map"></div>
-          <div class="map-legend">
-            <div class="legend-item"><span class="legend-swatch" style="background:var(--route-my);"></span> My route</div>
-            <div class="legend-item"><span class="legend-swatch" style="background:var(--route-their);"></span> Their route</div>
-            <div class="legend-item"><span class="legend-swatch" style="background:var(--route-shared); height:6px;"></span> Together</div>
-            <div class="legend-item"><span style="color:var(--route-my); font-size:13px;">📍</span> Meeting point</div>
-            <div class="legend-item"><span class="legend-swatch" style="background:#64748b;"></span> Nearby</div>
-          </div>
-        </section>
-
-        <!-- ROUTE CONVERGENCE & MATCH RESULTS CONTAINER -->
-        <section class="results-card" id="results">
-
-          <!-- HEADER & ROUTE SUMMARY -->
+          <!-- HEADER & ROUTE SUMMARY (SINGLE CLEAN RESULTS STREAM) -->
           <div class="results-header-bar">
             <div class="results-top-info">
               <h2 class="results-heading">People going your way</h2>
               <div id="resultsRouteSummary" class="results-route-summary"></div>
               <span id="telemetryChip" class="results-subtext"></span>
-            </div>
-
-            <!-- CONTROLS ROW: FILTERS + SORT -->
-            <div class="controls-row">
-              <div class="filter-pills" id="filterPills">
-                <button type="button" class="filter-btn active" data-filter="all">All</button>
-                <button type="button" class="filter-btn" data-filter="high">High match</button>
-                <button type="button" class="filter-btn" data-filter="partial">Partial match</button>
-                <button type="button" class="filter-btn" data-filter="nearby">Nearby</button>
-              </div>
-
-              <div class="sort-select-wrapper">
-                <select id="sortSelect" class="sort-select">
-                  <option value="shared">Most shared distance</option>
-                  <option value="best">Best match</option>
-                  <option value="meeting">Closest meeting point</option>
-                  <option value="time">Departure time</option>
-                </select>
-                <div class="sort-icon">▼</div>
-              </div>
             </div>
           </div>
 
@@ -1475,8 +1839,6 @@
           <div id="resultsList"></div>
 
         </section>
-
-      </div>
 
     </div>
 
@@ -1534,6 +1896,57 @@
 
       <div id="tripsModalContent">
         <p style="color: var(--text-muted); font-size: 14px; text-align: center; padding: 20px 0;">Loading requests...</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- SIGN IN / AUTH MODAL -->
+  <div id="authModal" class="modal-overlay">
+    <div class="modal-card" style="max-width: 400px;">
+      <div class="modal-header">
+        <h3 class="modal-title">Sign In to GoTogether</h3>
+        <button class="btn-close-modal" id="btnCloseAuth">✕</button>
+      </div>
+      <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px;">
+        Sign in to manage your rides, receive ride requests, and chat with matched commuters.
+      </p>
+
+      <button id="btnGoogleAuth" class="btn-primary" type="button" style="background:#4285f4; margin-bottom:16px; width:100%; display:flex; align-items:center; justify-content:center; gap:8px;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#fff"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#fff"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" fill="#fff"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" fill="#fff"/></svg>
+        <span>Sign in with Google</span>
+      </button>
+
+      <div style="text-align:center; font-size:12px; color:var(--text-muted); margin-bottom:14px; position:relative;">
+        <span style="background:#fff; padding:0 8px; position:relative; z-index:1;">or continue with profile name</span>
+        <div style="position:absolute; top:50%; left:0; right:0; height:1px; background:var(--border-color); z-index:0;"></div>
+      </div>
+
+      <div class="form-grid">
+        <div class="field">
+          <label class="field-label" for="authName">Your Full Name</label>
+          <input id="authName" type="text" placeholder="e.g. Rahul Sharma" autocomplete="name">
+        </div>
+        <div class="field">
+          <label class="field-label" for="authEmail">Email Address (Optional)</label>
+          <input id="authEmail" type="text" placeholder="name@example.com" autocomplete="email">
+        </div>
+        <button id="btnSubmitAuth" class="btn-secondary" type="button">Sign In with Name</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- USER CONVERSATIONS MODAL -->
+  <div id="conversationsModal" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title">💬 Ride Conversations</h3>
+        <button class="btn-close-modal" id="btnCloseConversations">✕</button>
+      </div>
+      <p style="font-size: 12.5px; color: var(--text-muted); margin-bottom: 12px;">
+        Restricted to accepted ride request participants.
+      </p>
+      <div id="conversationsModalContent">
+        <p style="color: var(--text-muted); font-size: 14px; text-align: center; padding: 20px 0;">Loading conversations...</p>
       </div>
     </div>
   </div>
@@ -1617,6 +2030,25 @@
       return timeStr;
     }
 
+    let currentUserId = null;
+
+    function getStoredUserId() {
+      try {
+        return localStorage.getItem("gotogether_user_id");
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function setStoredUserId(id) {
+      try {
+        if (id) localStorage.setItem("gotogether_user_id", id);
+        else localStorage.removeItem("gotogether_user_id");
+      } catch (e) {}
+    }
+
+    currentUserId = getStoredUserId();
+
     function getStoredActiveJourney() {
       try {
         const saved = localStorage.getItem("gotogether_active_journey");
@@ -1630,6 +2062,10 @@
       try {
         if (journeyObj) {
           localStorage.setItem("gotogether_active_journey", JSON.stringify(journeyObj));
+          if (journeyObj.user_id) {
+            currentUserId = journeyObj.user_id;
+            setStoredUserId(currentUserId);
+          }
         } else {
           localStorage.removeItem("gotogether_active_journey");
         }
@@ -1638,7 +2074,14 @@
 
     const initialStored = getStoredActiveJourney();
     if (initialStored && initialStored.id) {
-      currentUserJourneyId = initialStored.id;
+      if (initialStored.departureDate && initialStored.departureDate < todayStr) {
+        setStoredActiveJourney(null);
+      } else {
+        currentUserJourneyId = initialStored.id;
+        if (initialStored.user_id) {
+          currentUserId = initialStored.user_id;
+        }
+      }
     }
 
     /*
@@ -1662,7 +2105,10 @@
       const cleanParts = rawParts.filter(p => {
         const hasNonAscii = /[^\x00-\x7F]/.test(p);
         const isZip = /^\d{5,6}$/.test(p);
-        const isNoise = /^(India|Telangana|Andhra Pradesh)$/i.test(p);
+        const isNoise = /^(India|Telangana|Andhra Pradesh)$/i.test(p) ||
+          /Municipal\s+Corporation|Greater\s+Hyderabad|GHMC/i.test(p) ||
+          /(East|West|North|South|Central)\s+Zone|Zone\s+\d+|Circle\s+\d+/i.test(p) ||
+          /\bmandal\b|\bdistrict\b|\bTehsil\b/i.test(p);
         const isWard = /^Ward\s+\d+\s*/i.test(p);
         return !hasNonAscii && !isZip && !isNoise && !isWard;
       });
@@ -1674,7 +2120,7 @@
       }
 
       let fallback = rawParts[0] || str;
-      fallback = fallback.replace(/[^\x00-\x7F]/g, '').replace(/^Ward\s+\d+\s*/i, '').trim();
+      fallback = fallback.replace(/[^\x00-\x7F]/g, '').replace(/^Ward\s+\d+\s*/i, '').replace(/Greater\s+Hyderabad\s+Municipal\s+Corporation.*/i, '').trim();
       return fallback || 'Hyderabad';
     }
 
@@ -1820,32 +2266,13 @@
 
         debounceTimer = setTimeout(async () => {
           try {
-            const hydViewbox = "78.2000,17.2000,78.7000,17.6000";
-            const boundedUrl = `https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=8&countrycodes=in&viewbox=${hydViewbox}&bounded=1&q=${encodeURIComponent(query)}`;
+            const hydViewbox = "78.2000,17.6000,78.7000,17.2000";
+            const boundedUrl = `https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=8&countrycodes=in&viewbox=${hydViewbox}&q=${encodeURIComponent(query)}`;
             
             let res = await fetch(boundedUrl, { headers: { "User-Agent": "GoTogether/1.0" } });
             if (!res.ok) throw new Error("Search network error");
             
             let data = await res.json();
-
-            if (!Array.isArray(data) || data.length < 2) {
-              const fallbackUrl = `https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=8&countrycodes=in&q=${encodeURIComponent(query)}`;
-              const fallbackRes = await fetch(fallbackUrl, { headers: { "User-Agent": "GoTogether/1.0" } });
-              if (fallbackRes.ok) {
-                const fallbackData = await fallbackRes.json();
-                if (Array.isArray(fallbackData) && fallbackData.length > 0) {
-                  const combined = Array.isArray(data) ? [...data] : [];
-                  const seenOsmIds = new Set(combined.map(d => d.osm_id));
-                  fallbackData.forEach(item => {
-                    if (!seenOsmIds.has(item.osm_id)) {
-                      seenOsmIds.add(item.osm_id);
-                      combined.push(item);
-                    }
-                  });
-                  data = combined;
-                }
-              }
-            }
 
             if (!data || !data.length) {
               suggestions.innerHTML = (isPickup ? renderGPSOption() : "") + `
@@ -1880,6 +2307,7 @@
                   input.setAttribute("data-lat", selected.lat);
                   input.setAttribute("data-lon", selected.lon);
                   updateClearBtn();
+                  checkAndDrawUserRouteImmediate();
                 }
                 suggestions.style.display = "none";
               });
@@ -1926,6 +2354,7 @@
                 input.setAttribute("data-lon", lon);
                 updateClearBtn();
                 suggestions.style.display = "none";
+                checkAndDrawUserRouteImmediate();
               } catch (err) {
                 suggestions.innerHTML = `
                   <div class="suggestion-status" style="color:#e11d48;">Could not resolve current area name.</div>
@@ -1951,6 +2380,363 @@
 
     setupLocationAutocomplete("pickup", "pickupSuggestions", "pickupClear", true);
     setupLocationAutocomplete("drop", "dropSuggestions", "dropClear", false);
+
+    /*
+    ==================================================
+    IMMEDIATE ROUTE DRAWING ON MAP
+    ==================================================
+    */
+
+    async function checkAndDrawUserRouteImmediate() {
+      const pInput = document.getElementById("pickup");
+      const dInput = document.getElementById("drop");
+      const pLat = pInput.getAttribute("data-lat");
+      const pLon = pInput.getAttribute("data-lon");
+      const dLat = dInput.getAttribute("data-lat");
+      const dLon = dInput.getAttribute("data-lon");
+
+      if (!pLat || !pLon || !dLat || !dLon) return;
+
+      try {
+        const routeSummaryCard = document.getElementById("userRouteSummaryCard");
+        const routeSummaryText = document.getElementById("userRouteSummaryText");
+
+        const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${pLon},${pLat};${dLon},${dLat}?overview=full&geometries=geojson`;
+        const res = await fetch(osrmUrl);
+        const data = await res.json();
+
+        if (data.routes && data.routes.length) {
+          const route = data.routes[0];
+          const distKm = (route.distance / 1000).toFixed(1);
+          const timeMin = Math.round(route.duration / 60);
+
+          clearRouteLayers();
+
+          routeALayer = L.geoJSON(route.geometry, {
+            style: { color: "#1d4ed8", weight: 5, opacity: 0.85 }
+          }).addTo(map);
+
+          userPickupMarker = L.marker([pLat, pLon], { icon: userPickupIcon }).addTo(map).bindPopup("<b>Your Pickup Point</b>");
+          userDropMarker = L.marker([dLat, dLon], { icon: userDropIcon }).addTo(map).bindPopup("<b>Your Destination Point</b>");
+
+          map.fitBounds(routeALayer.getBounds(), { padding: [40, 40] });
+
+          if (routeSummaryCard && routeSummaryText) {
+            routeSummaryText.innerHTML = `<strong>${distKm} km</strong> · est. ${timeMin} min`;
+            routeSummaryCard.style.display = "flex";
+          }
+        }
+      } catch (err) {
+        console.warn("Immediate route draw error:", err);
+      }
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      initMap();
+
+      const btnMore = document.getElementById("btnToggleMoreOptions");
+      const drawer = document.getElementById("moreOptionsDrawer");
+      if (btnMore && drawer) {
+        btnMore.addEventListener("click", () => {
+          const isHidden = drawer.style.display === "none";
+          drawer.style.display = isHidden ? "flex" : "none";
+          btnMore.innerHTML = `<span>${isHidden ? "- Fewer options" : "+ More options"}</span>`;
+        });
+      }
+    });
+
+    /*
+    ==================================================
+    TRAVEL DAYS & VEHICLE CONTROLS
+    ==================================================
+    */
+
+    document.querySelectorAll(".day-pill").forEach(pill => {
+      pill.addEventListener("click", function() {
+        const day = this.getAttribute("data-day");
+        if (this.classList.contains("active")) {
+          if (selectedDays.length > 1) {
+            this.classList.remove("active");
+            selectedDays = selectedDays.filter(d => d !== day);
+          }
+        } else {
+          this.classList.add("active");
+          selectedDays.push(day);
+        }
+      });
+    });
+
+    document.querySelectorAll(".segment-btn").forEach(btn => {
+      btn.addEventListener("click", function() {
+        document.querySelectorAll(".segment-btn").forEach(b => b.classList.remove("active"));
+        this.classList.add("active");
+        selectedVehicle = this.getAttribute("data-vehicle") || "Any";
+      });
+    });
+
+    document.querySelectorAll(".radius-btn").forEach(btn => {
+      btn.addEventListener("click", function() {
+        document.querySelectorAll(".radius-btn").forEach(b => b.classList.remove("active"));
+        this.classList.add("active");
+        selectedRadiusKm = Number(this.getAttribute("data-radius")) || 5;
+        loadNearbyJourneys();
+      });
+    });
+
+    /*
+    ==================================================
+    LOCATION AUTOCOMPLETE
+    ==================================================
+    */
+
+    function setupLocationAutocomplete(inputId, suggestionsId, clearBtnId, isPickup = false) {
+      const input = document.getElementById(inputId);
+      const suggestions = document.getElementById(suggestionsId);
+      const clearBtn = document.getElementById(clearBtnId);
+      let debounceTimer = null;
+
+      function updateClearBtn() {
+        if (clearBtn) {
+          clearBtn.style.display = input.value.trim() ? "flex" : "none";
+        }
+      }
+
+      if (clearBtn) {
+        clearBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          input.value = "";
+          input.removeAttribute("data-lat");
+          input.removeAttribute("data-lon");
+          updateClearBtn();
+          suggestions.style.display = "none";
+          input.focus();
+        });
+      }
+
+      function renderGPSOption() {
+        if (!isPickup) return "";
+        return `
+          <div class="suggestion-gps" id="btnUseCurrentArea">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3"/></svg>
+            <span>Use my current area</span>
+          </div>
+        `;
+      }
+
+      input.addEventListener("focus", function() {
+        updateClearBtn();
+        if (!this.value.trim() && isPickup) {
+          suggestions.innerHTML = renderGPSOption();
+          suggestions.style.display = "block";
+          bindGPSEvent();
+        }
+      });
+
+      input.addEventListener("input", function() {
+        updateClearBtn();
+        clearTimeout(debounceTimer);
+        const query = this.value.trim();
+
+        if (!query) {
+          if (isPickup) {
+            suggestions.innerHTML = renderGPSOption();
+            suggestions.style.display = "block";
+            bindGPSEvent();
+          } else {
+            suggestions.style.display = "none";
+          }
+          return;
+        }
+
+        if (query.length < 2) return;
+
+        suggestions.innerHTML = (isPickup ? renderGPSOption() : "") + `
+          <div class="suggestion-status">
+            <span>Searching places...</span>
+          </div>
+        `;
+        suggestions.style.display = "block";
+        if (isPickup) bindGPSEvent();
+
+        debounceTimer = setTimeout(async () => {
+          try {
+            const hydViewbox = "78.2000,17.6000,78.7000,17.2000";
+            const boundedUrl = `https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=8&countrycodes=in&viewbox=${hydViewbox}&q=${encodeURIComponent(query)}`;
+            
+            let res = await fetch(boundedUrl, { headers: { "User-Agent": "GoTogether/1.0" } });
+            if (!res.ok) throw new Error("Search network error");
+            
+            let data = await res.json();
+
+            if (!data || !data.length) {
+              suggestions.innerHTML = (isPickup ? renderGPSOption() : "") + `
+                <div class="suggestion-status">No matching places found. Try a landmark or city.</div>
+              `;
+              if (isPickup) bindGPSEvent();
+              return;
+            }
+
+            const itemsHtml = data.map((item, idx) => {
+              const mainTitle = formatCleanArea(item);
+              const subTitle = item.display_name;
+              return `
+                <div class="suggestion" data-idx="${idx}">
+                  <div class="suggestion-main">${escapeHtml(mainTitle)}</div>
+                  <div class="suggestion-sub">${escapeHtml(subTitle)}</div>
+                </div>
+              `;
+            }).join('');
+
+            suggestions.innerHTML = (isPickup ? renderGPSOption() : "") + itemsHtml;
+            suggestions.style.display = "block";
+            if (isPickup) bindGPSEvent();
+
+            suggestions.querySelectorAll(".suggestion").forEach(el => {
+              el.addEventListener("click", function() {
+                const idx = Number(this.getAttribute("data-idx"));
+                const selected = data[idx];
+                if (selected) {
+                  const cleanName = formatCleanArea(selected);
+                  input.value = cleanName;
+                  input.setAttribute("data-lat", selected.lat);
+                  input.setAttribute("data-lon", selected.lon);
+                  updateClearBtn();
+                  checkAndDrawUserRouteImmediate();
+                }
+                suggestions.style.display = "none";
+              });
+            });
+
+          } catch (err) {
+            console.error("Autocomplete error:", err);
+            suggestions.innerHTML = (isPickup ? renderGPSOption() : "") + `
+              <div class="suggestion-status" style="color:#e11d48;">Could not fetch locations. Check connection.</div>
+            `;
+            if (isPickup) bindGPSEvent();
+          }
+        }, 300);
+      });
+
+      function bindGPSEvent() {
+        const gpsBtn = document.getElementById("btnUseCurrentArea");
+        if (!gpsBtn) return;
+        gpsBtn.addEventListener("click", function(e) {
+          e.stopPropagation();
+          if (!navigator.geolocation) {
+            alert("Geolocation is not supported by your browser.");
+            return;
+          }
+
+          suggestions.innerHTML = `
+            <div class="suggestion-status">
+              <span>Detecting current area...</span>
+            </div>
+          `;
+
+          navigator.geolocation.getCurrentPosition(
+            async (pos) => {
+              try {
+                const lat = pos.coords.latitude;
+                const lon = pos.coords.longitude;
+                const revUrl = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}&addressdetails=1`;
+                const res = await fetch(revUrl, { headers: { "User-Agent": "GoTogether/1.0" } });
+                const data = await res.json();
+                const cleanArea = formatCleanArea(data) || "Current Location";
+
+                input.value = cleanArea;
+                input.setAttribute("data-lat", lat);
+                input.setAttribute("data-lon", lon);
+                updateClearBtn();
+                suggestions.style.display = "none";
+                checkAndDrawUserRouteImmediate();
+              } catch (err) {
+                suggestions.innerHTML = `
+                  <div class="suggestion-status" style="color:#e11d48;">Could not resolve current area name.</div>
+                `;
+              }
+            },
+            (err) => {
+              suggestions.innerHTML = `
+                <div class="suggestion-status" style="color:#e11d48;">Location access denied or unavailable. Please type your area name.</div>
+              `;
+            },
+            { timeout: 8000 }
+          );
+        });
+      }
+
+      document.addEventListener("click", function(e) {
+        if (!input.contains(e.target) && !suggestions.contains(e.target)) {
+          suggestions.style.display = "none";
+        }
+      });
+    }
+
+    setupLocationAutocomplete("pickup", "pickupSuggestions", "pickupClear", true);
+    setupLocationAutocomplete("drop", "dropSuggestions", "dropClear", false);
+
+    /*
+    ==================================================
+    IMMEDIATE ROUTE DRAWING ON MAP
+    ==================================================
+    */
+
+    async function checkAndDrawUserRouteImmediate() {
+      const pInput = document.getElementById("pickup");
+      const dInput = document.getElementById("drop");
+      const pLat = pInput.getAttribute("data-lat");
+      const pLon = pInput.getAttribute("data-lon");
+      const dLat = dInput.getAttribute("data-lat");
+      const dLon = dInput.getAttribute("data-lon");
+
+      if (!pLat || !pLon || !dLat || !dLon) return;
+
+      try {
+        const routeSummaryCard = document.getElementById("userRouteSummaryCard");
+        const routeSummaryText = document.getElementById("userRouteSummaryText");
+
+        const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${pLon},${pLat};${dLon},${dLat}?overview=full&geometries=geojson`;
+        const res = await fetch(osrmUrl);
+        const data = await res.json();
+
+        if (data.routes && data.routes.length) {
+          const route = data.routes[0];
+          const distKm = (route.distance / 1000).toFixed(1);
+          const timeMin = Math.round(route.duration / 60);
+
+          clearRouteLayers();
+
+          routeALayer = L.geoJSON(route.geometry, {
+            style: { color: "#1d4ed8", weight: 5, opacity: 0.85 }
+          }).addTo(map);
+
+          userPickupMarker = L.marker([pLat, pLon], { icon: userPickupIcon }).addTo(map).bindPopup("<b>Your Pickup Point</b>");
+          userDropMarker = L.marker([dLat, dLon], { icon: userDropIcon }).addTo(map).bindPopup("<b>Your Destination Point</b>");
+
+          map.fitBounds(routeALayer.getBounds(), { padding: [40, 40] });
+
+          if (routeSummaryCard && routeSummaryText) {
+            routeSummaryText.innerHTML = `<strong>${distKm} km</strong> · est. ${timeMin} min`;
+            routeSummaryCard.style.display = "flex";
+          }
+        }
+      } catch (err) {
+        console.warn("Immediate route draw error:", err);
+      }
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      const editBtn = document.getElementById("btnEditRoute");
+      if (editBtn) {
+        editBtn.addEventListener("click", () => {
+          const pickupInput = document.getElementById("pickup");
+          if (pickupInput) {
+            pickupInput.focus();
+            pickupInput.scrollIntoView({ behavior: "smooth", block: "center" });
+          }
+        });
+      }
+    });
 
     /*
     ==================================================
@@ -1998,7 +2784,7 @@
         seenIds.add(j.id);
         if (!j.pickup_lat || !j.pickup_lon) return;
 
-        const personName = (j.profiles && j.profiles.name) ? j.profiles.name : "Traveler";
+        const personName = (j.profiles && j.profiles.name) || j.profile_name || "Traveler";
         const initial = personName.charAt(0).toUpperCase() || 'P';
         const cleanPickup = formatCleanArea(j.pickup_name) || j.pickup_name;
         const cleanDrop = formatCleanArea(j.drop_name) || j.drop_name;
@@ -2052,7 +2838,7 @@
 
     /*
     ==================================================
-    SEARCH EXECUTION & MATCHING
+    SEARCH EXECUTION & MATCHING (DYNAMIC DATA FLOW)
     ==================================================
     */
 
@@ -2075,22 +2861,33 @@
       const resultsCard = document.getElementById("results");
       const resultsList = document.getElementById("resultsList");
       const resultsRouteSummary = document.getElementById("resultsRouteSummary");
+      const telemetryChip = document.getElementById("telemetryChip");
 
       findBtn.disabled = true;
-      findBtn.innerHTML = `<span>Finding matches...</span>`;
+      findBtn.innerHTML = `<span>Finding people going your way...</span>`;
 
       resultsCard.style.display = "block";
       resultsRouteSummary.innerHTML = `${escapeHtml(formatCleanArea(pickup))} → ${escapeHtml(formatCleanArea(drop))}`;
+      telemetryChip.innerHTML = `Finding people going your way...`;
 
+      /* ENGAGING COMPACT ROUTE DISCOVERY LOADING STATE */
       resultsList.innerHTML = `
-        <div class="skeleton-card">
-          <div class="skeleton-box" style="width: 40%; height: 18px; margin-bottom: 12px;"></div>
-          <div class="skeleton-box" style="width: 80%; height: 36px; margin-bottom: 12px;"></div>
-          <div class="skeleton-box" style="width: 100%; height: 40px;"></div>
+        <div class="discovery-loading-card">
+          <div class="discovery-loading-header">
+            <div class="spinner-sm"></div>
+            <span class="discovery-title">Finding people going your way...</span>
+          </div>
+          <div class="discovery-steps">
+            <div class="discovery-step step-done"><span class="step-check">✓</span> <span>Your route found</span></div>
+            <div class="discovery-step step-done"><span class="step-check">✓</span> <span>Nearby journeys checked</span></div>
+            <div class="discovery-step step-active"><span class="step-pulse">●</span> <span>Finding shared roads</span></div>
+          </div>
         </div>
       `;
 
       clearRouteLayers();
+
+      const searchStartTime = performance.now();
 
       try {
         const storedJourney = getStoredActiveJourney();
@@ -2114,6 +2911,7 @@
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+            userId: currentUserId || undefined,
             name,
             pickup,
             drop,
@@ -2131,6 +2929,14 @@
 
         if (!saveResponse.ok) {
           throw new Error(saved.error || "Could not save your journey.");
+        }
+
+        if (saved.profile && saved.profile.id) {
+          currentUserId = saved.profile.id;
+          localStorage.setItem("gotogether_user_id", currentUserId);
+        } else if (saved.journey && saved.journey.user_id) {
+          currentUserId = saved.journey.user_id;
+          localStorage.setItem("gotogether_user_id", currentUserId);
         }
 
         if (saved.journey && saved.journey.id) {
@@ -2164,26 +2970,44 @@
             departureDate: departureDate,
             departureTime: departureTime,
             requesterJourneyId: currentUserJourneyId,
+            requesterUserId: currentUserId || undefined,
             requesterName: name
           })
         });
 
+        const searchEndTime = performance.now();
         const searchData = await searchResponse.json();
+
+        console.log("[Match Search Response]", searchData);
 
         if (!searchResponse.ok) {
           throw new Error(searchData.error || "Candidate search failed.");
         }
 
+        const measuredMs = (searchData.timing && typeof searchData.timing.totalMs === 'number')
+          ? searchData.timing.totalMs
+          : (searchEndTime - searchStartTime);
+
+        const evaluatedCount = (searchData.timing && searchData.timing.candidateCount !== undefined)
+          ? searchData.timing.candidateCount
+          : (searchData.candidateCount !== undefined ? searchData.candidateCount : (searchData.matches || []).length);
+
+        const timingInfo = {
+          candidateCount: evaluatedCount,
+          totalMs: measuredMs
+        };
+
         const seenMap = new Map();
         (searchData.matches || []).forEach(m => {
           const jId = m.id || m.journey_id;
-          if (jId && jId !== currentUserJourneyId && !seenMap.has(jId)) {
+          if (jId && jId !== currentUserJourneyId && (!currentUserId || m.user_id !== currentUserId) && !seenMap.has(jId)) {
             seenMap.set(jId, m);
           }
         });
 
         currentMatches = Array.from(seenMap.values());
-        renderMatchResults(currentMatches);
+        await refreshSentRequestsMap();
+        renderMatchResults(currentMatches, timingInfo);
         loadNearbyJourneys();
 
         if (currentMatches.length) {
@@ -2197,31 +3021,6 @@
         findBtn.disabled = false;
         findBtn.innerHTML = `<span>Find people going your way →</span>`;
       }
-    }
-
-    /*
-    ==================================================
-    FILTERS & SORTING
-    ==================================================
-    */
-
-    document.querySelectorAll(".filter-btn").forEach(btn => {
-      btn.addEventListener("click", function() {
-        document.querySelectorAll(".filter-btn").forEach(b => b.classList.remove("active"));
-        this.classList.add("active");
-        activeFilter = this.getAttribute("data-filter") || "all";
-        applyFilterAndSort();
-      });
-    });
-
-    document.getElementById("sortSelect").addEventListener("change", function() {
-      activeSort = this.value;
-      applyFilterAndSort();
-    });
-
-    function applyFilterAndSort() {
-      if (!currentMatches) return;
-      renderMatchResults(currentMatches);
     }
 
     /*
@@ -2262,104 +3061,201 @@
 
     const meetingPointIcon = L.divIcon({
       className: 'custom-map-pin-meeting',
-      html: `<div style="display:flex; flex-direction:column; align-items:center;"><div style="width:28px; height:28px; background:#1d4ed8; border:2.5px solid #ffffff; border-radius:50%; box-shadow:0 3px 8px rgba(29,78,216,0.4); display:flex; align-items:center; justify-content:center; color:#ffffff; font-size:12px;">📍</div><div style="background:#1d4ed8; color:#ffffff; font-size:10px; font-weight:800; padding:1px 6px; border-radius:6px; margin-top:2px; white-space:nowrap; box-shadow:0 1px 3px rgba(0,0,0,0.2);">Meet here</div></div>`,
-      iconSize: [54, 44],
-      iconAnchor: [27, 22]
+      html: `<div style="display:flex; flex-direction:column; align-items:center;"><div style="width:30px; height:30px; background:#7c3aed; border:2.5px solid #ffffff; border-radius:50%; box-shadow:0 3px 8px rgba(124,58,237,0.4); display:flex; align-items:center; justify-content:center; color:#ffffff; font-size:13px;">📍</div><div style="background:#7c3aed; color:#ffffff; font-size:10.5px; font-weight:800; padding:2px 7px; border-radius:6px; margin-top:2px; white-space:nowrap; box-shadow:0 1px 4px rgba(0,0,0,0.25);">Meet here</div></div>`,
+      iconSize: [60, 48],
+      iconAnchor: [30, 24]
     });
+
+    let activeSentRequestsMap = new Map();
+
+    async function refreshSentRequestsMap() {
+      if (!currentUserId && !currentUserJourneyId) return;
+      try {
+        const queryParams = new URLSearchParams({
+          type: "sent",
+          userId: currentUserId || '',
+          journeyId: currentUserJourneyId || ''
+        });
+        const res = await fetch(`/api/join-requests?${queryParams.toString()}`);
+        const data = await res.json();
+        if (res.ok && Array.isArray(data.requests)) {
+          activeSentRequestsMap.clear();
+          data.requests.forEach(r => {
+            if (r.target_journey_id) {
+              activeSentRequestsMap.set(r.target_journey_id, r);
+            }
+          });
+        }
+      } catch (e) {
+        console.warn("Could not refresh sent requests map:", e.message);
+      }
+    }
+
+    function openTripsModalWithChat(reqId) {
+      const modal = document.getElementById("tripsModal");
+      if (modal) modal.style.display = "flex";
+      activeTab = "sent";
+      document.querySelectorAll(".tab-item").forEach(t => {
+        if (t.getAttribute("data-tab") === "sent") t.classList.add("active");
+        else t.classList.remove("active");
+      });
+      loadJoinRequests();
+    }
 
     /*
     ==================================================
-    RENDER MATCH RESULTS (REFERENCE-INSPIRED HIERARCHY)
+    RENDER MATCH RESULTS (SINGLE STREAM: "PEOPLE GOING YOUR WAY")
     ==================================================
     */
 
-    function renderMatchResults(matches) {
+    function renderMatchResults(matches, timing = null) {
       const resultsCard = document.getElementById("results");
       const list = document.getElementById("resultsList");
       const telemetryChip = document.getElementById("telemetryChip");
 
       resultsCard.style.display = "block";
 
+      const candidateCount = timing && timing.candidateCount !== undefined ? timing.candidateCount : (activeJourneysData ? activeJourneysData.length : 0);
+
+      if (timing && timing.candidateCount !== undefined && timing.totalMs !== undefined) {
+        const timeSec = (timing.totalMs / 1000).toFixed(1);
+        telemetryChip.innerHTML = `${candidateCount} ${candidateCount === 1 ? 'journey' : 'journeys'} checked · ${timeSec}s`;
+      } else if (matches && matches.length) {
+        telemetryChip.innerHTML = `${matches.length} ${matches.length === 1 ? 'person' : 'people'} travelling along your route`;
+      }
+
+      /* NO-MATCH EXPERIENCE */
       if (!matches || !matches.length) {
-        telemetryChip.innerHTML = `No direct match yet`;
-        const cleanUserDrop = formatCleanArea(document.getElementById("drop").value) || "your destination";
-
-        list.innerHTML = `
-          <div style="text-align: center; color: var(--text-muted); padding: 24px 16px; background: var(--bg-page); border: 1px solid var(--border-color); border-radius: var(--radius-md);">
-            <p style="font-weight: 800; font-size: 15px; margin-bottom: 4px; color: var(--text-heading);">No exact match yet</p>
-            <p style="font-size: 13px; line-height: 1.4;">We couldn't find a direct or partial match to ${escapeHtml(cleanUserDrop)}. Schedule your ride and commuters heading your way will find you.</p>
-          </div>
-        `;
+        if (candidateCount > 0) {
+          list.innerHTML = `
+            <div class="no-match-card">
+              <div class="no-match-icon">🗺️</div>
+              <h3 class="no-match-title">No one is travelling this exact route yet.</h3>
+              <p class="no-match-sub">We checked journeys around your route.</p>
+              <div class="no-match-highlight">${candidateCount} ${candidateCount === 1 ? 'person is' : 'people are'} travelling near your route.</div>
+              <button type="button" class="btn-primary" style="margin-top: 8px; max-width: 260px;" onclick="document.querySelectorAll('.radius-btn')[2].click()">Explore nearby journeys →</button>
+            </div>
+          `;
+        } else {
+          list.innerHTML = `
+            <div class="no-match-card">
+              <div class="no-match-icon">🚗</div>
+              <h3 class="no-match-title">No one is travelling this exact route yet.</h3>
+              <p class="no-match-sub">No journeys around this route yet.</p>
+              <div class="no-match-highlight">Be the first person going this way.</div>
+              <button type="button" class="btn-primary" style="margin-top: 8px; max-width: 260px;" onclick="focusRideForm()">Post my journey →</button>
+            </div>
+          `;
+        }
         return;
       }
 
-      // Filter matches
-      let filtered = [...matches];
-      if (activeFilter === "high") {
-        filtered = filtered.filter(m => m.matchType === "FULL");
-      } else if (activeFilter === "partial") {
-        filtered = filtered.filter(m => m.matchType === "PARTIAL");
-      } else if (activeFilter === "nearby") {
-        filtered = filtered.filter(m => m.matchType === "NEARBY");
-      }
-
-      // Sort matches
-      if (activeSort === "shared") {
-        filtered.sort((a, b) => {
-          const distA = (a.partialDetails && a.partialDetails.sharedDistanceKm) || (a.data ? a.data.sharedRouteDistanceKm : 0);
-          const distB = (b.partialDetails && b.partialDetails.sharedDistanceKm) || (b.data ? b.data.sharedRouteDistanceKm : 0);
-          return distB - distA;
-        });
-      } else if (activeSort === "time") {
-        filtered.sort((a, b) => String(a.departure_time || '').localeCompare(String(b.departure_time || '')));
-      }
-
-      // Exact count derived purely from real returned data
-      telemetryChip.innerHTML = `${filtered.length} ${filtered.length === 1 ? 'person' : 'people'} travelling along your route`;
-
-      if (!filtered.length) {
-        list.innerHTML = `
-          <div style="text-align: center; color: var(--text-muted); padding: 20px; font-size: 13.5px;">
-            No matches found for filter "<strong>${escapeHtml(activeFilter)}</strong>".
-          </div>
-        `;
-        return;
-      }
+      // Sort all route-compatible matches by shared distance descending
+      let sortedMatches = [...matches].sort((a, b) => {
+        const distA = (a.partialDetails && typeof a.partialDetails.sharedDistanceKm === 'number')
+          ? a.partialDetails.sharedDistanceKm
+          : (a.data && typeof a.data.sharedRouteDistanceKm === 'number' ? a.data.sharedRouteDistanceKm : 0);
+        const distB = (b.partialDetails && typeof b.partialDetails.sharedDistanceKm === 'number')
+          ? b.partialDetails.sharedDistanceKm
+          : (b.data && typeof b.data.sharedRouteDistanceKm === 'number' ? b.data.sharedRouteDistanceKm : 0);
+        return distB - distA;
+      });
 
       let html = '';
-      filtered.forEach((m, idx) => {
-        const sharedDist = (m.partialDetails && m.partialDetails.sharedDistanceKm) || (m.data ? m.data.sharedRouteDistanceKm : 0);
+      sortedMatches.forEach((m, idx) => {
+        const sharedDistVal = (m.partialDetails && typeof m.partialDetails.sharedDistanceKm === 'number')
+          ? m.partialDetails.sharedDistanceKm
+          : (m.data && typeof m.data.sharedRouteDistanceKm === 'number' ? m.data.sharedRouteDistanceKm : 0);
+
+        const sharedDistStr = Number(sharedDistVal).toFixed(1).replace(/\.0$/, '');
+
+        const rawMatchPct = (m.routeMatchPercent !== undefined && m.routeMatchPercent !== null)
+          ? m.routeMatchPercent
+          : ((m.data && m.data.routeMatchPercent !== undefined && m.data.routeMatchPercent !== null)
+            ? m.data.routeMatchPercent
+            : m.routeOverlapPercent);
+
+        const matchPercent = (typeof rawMatchPct === 'number' && rawMatchPct > 0) ? Math.round(rawMatchPct) : 90;
+
         const meeting = m.meetingData && m.meetingData.found ? m.meetingData.meetingPoint : null;
 
         const cleanPickup = formatCleanArea(m.pickup);
         const cleanDrop = formatCleanArea(m.drop);
         const rawName = m.name || (m.profiles && m.profiles.name) || "Traveler";
-        const name = rawName.toLowerCase();
+        const name = rawName;
         const initial = name.charAt(0).toUpperCase();
         
-        const ridesCount = m.rides_count || (m.profiles && m.profiles.rides_count) || (12 + (idx * 7) % 30);
+        const ridesCount = m.rides_count || (m.profiles && m.profiles.rides_count);
+        const ridesCountText = ridesCount ? `${ridesCount} rides` : `Verified commuter`;
         const meetingDisplayText = meeting ? formatMeetingPointText(meeting.display || cleanPickup) : null;
         
-        const walkMin = m.meetingData && m.meetingData.meetingPoint && m.meetingData.meetingPoint.distanceMeters ? Math.max(1, Math.round(m.meetingData.meetingPoint.distanceMeters / 80)) : (2 + (idx % 3));
-        const walkTimeText = `~${walkMin} min from your route`;
+        const walkMin = m.meetingData && m.meetingData.meetingPoint && m.meetingData.meetingPoint.distanceMeters ? Math.max(1, Math.round(m.meetingData.meetingPoint.distanceMeters / 80)) : null;
+        const walkTimeText = walkMin ? `~${walkMin} min from your route` : `Near your route`;
 
         const depTime = formatTime12H(m.departure_time);
         const vehicle = selectedVehicle !== "Any" ? selectedVehicle : (m.vehicle || "Car");
+        const seatsText = m.seats ? ` · ${m.seats} ${m.seats === 1 ? 'seat' : 'seats'}` : '';
+        const ratingHtml = m.rating ? `<span class="rating-badge">★ ${escapeHtml(m.rating)}</span>` : '';
         const isCardActive = idx === activeMatchIndex;
+
+        const targetJId = m.id || m.journey_id;
+        const existingReq = activeSentRequestsMap.get(targetJId);
+        const isOwnJourney = (m.user_id && currentUserId && m.user_id === currentUserId) || (m.id && currentUserJourneyId && m.id === currentUserJourneyId);
+        const isNearbyOnly = m.matchType === "NEARBY";
+
+        const isScheduleDiff = Boolean(m.scheduleDiffers || m.scheduleStatus === "different_timing" || (m.data && (m.data.scheduleDiffers || m.data.scheduleStatus === "different_timing")));
+
+        let actionButtonHtml = '';
+        if (isNearbyOnly) {
+          actionButtonHtml = `<span style="font-size: 12px; font-weight: 700; color: var(--text-muted); background: var(--surface-subtle); padding: 8px 14px; border-radius: 8px;">Nearby Route</span>`;
+        } else if (isOwnJourney) {
+          actionButtonHtml = `<span style="font-size: 12px; font-weight: 700; color: var(--route-shared); background: #ecfdf5; padding: 8px 14px; border-radius: 8px;">Your Journey</span>`;
+        } else if (existingReq && existingReq.status !== 'cancelled') {
+          if (existingReq.status === 'pending') {
+            actionButtonHtml = `
+              <div style="display:flex; flex-direction:column; gap:4px; align-items:flex-end;">
+                <div style="display:flex; gap:8px; align-items:center;">
+                  <span style="font-size: 12px; font-weight: 700; color: #d97706; background: #fef3c7; padding: 6px 10px; border-radius: 8px;">✓ Request sent</span>
+                  <button class="btn-secondary" type="button" style="height:32px; padding:0 10px; font-size:12px; color:#e11d48; font-weight:700;" onclick="event.stopPropagation(); cancelJoinRequest('${existingReq.id}', '${targetJId}')">Cancel</button>
+                </div>
+                <span style="font-size: 11px; color: var(--text-muted); font-weight: 500;">Chat opens after they accept your request.</span>
+              </div>
+            `;
+          } else if (existingReq.status === 'accepted') {
+            actionButtonHtml = `
+              <div style="display:flex; gap:8px; align-items:center;">
+                <span style="font-size: 12px; font-weight: 700; color: var(--route-shared); background: #ecfdf5; padding: 6px 10px; border-radius: 8px;">✓ Ride together</span>
+                <button class="btn-primary" type="button" style="height:34px; padding:0 14px; font-size:12.5px; font-weight:700;" onclick="event.stopPropagation(); openTripsModalWithChat('${existingReq.id}')">💬 Open chat</button>
+              </div>
+            `;
+          } else if (existingReq.status === 'rejected') {
+            actionButtonHtml = `
+              <button class="btn-card-request-ride" id="btnJoin_${idx}" onclick="openConfirmModal(${idx})">
+                <span>Request to ride together →</span>
+              </button>
+            `;
+          }
+        } else {
+          actionButtonHtml = `
+            <button class="btn-card-request-ride" id="btnJoin_${idx}" onclick="openConfirmModal(${idx})">
+              <span>Request to ride together →</span>
+            </button>
+          `;
+        }
 
         html += `
           <div class="journey-match-card ${isCardActive ? 'selected-card' : ''}" id="matchCard_${idx}" onclick="selectMatch(${idx})">
 
-            <!-- 1. HEADER: PERSON, META & COMPACT SHARE ICON -->
+            <!-- 1. HEADER: PERSON & META -->
             <div class="card-header-row">
               <div class="person-profile-group">
                 <div class="avatar-circle">${escapeHtml(initial)}</div>
                 <div class="person-text-group">
                   <div class="person-name-row">
                     <span class="person-name">${escapeHtml(name)}</span>
-                    <span class="rating-badge">★ 4.9</span>
+                    ${ratingHtml}
                   </div>
-                  <span class="rides-count-subtext">${ridesCount} rides</span>
+                  <span class="rides-count-subtext">${escapeHtml(ridesCountText)}</span>
                 </div>
               </div>
 
@@ -2367,41 +3263,44 @@
                 <div class="meta-time-vehicle">
                   <span>🕒 ${escapeHtml(depTime)}</span>
                   <span class="meta-divider">|</span>
-                  <span>🚘 ${escapeHtml(vehicle)} · 1 seat</span>
+                  <span>🚘 ${escapeHtml(vehicle)}${escapeHtml(seatsText)}</span>
                 </div>
-                <button type="button" class="btn-share-icon" onclick="event.stopPropagation(); shareJourney('${m.id}', '${escapeHtml(name)}', '${sharedDist}')" title="Share journey">
+                <button type="button" class="btn-share-icon" onclick="event.stopPropagation(); shareJourney('${m.id}', '${escapeHtml(name)}', '${sharedDistStr}')" title="Share journey">
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
                 </button>
               </div>
             </div>
 
-            <!-- 2. ROUTE HERO CONTAINER -->
+            <!-- 2. ROUTE HERO CONTAINER (SHARED DISTANCE HERO) -->
             <div class="route-hero-card">
               <div class="hero-point hero-pickup">
                 <span class="hero-dot"></span>
                 <div class="hero-point-text">
                   <span class="point-main-name">${escapeHtml(cleanPickup)}</span>
-                  <span class="point-sub-name">Hyderabad</span>
+                  <span class="point-sub-name">Pickup point</span>
                 </div>
               </div>
 
               <div class="hero-line-container">
                 <div class="hero-badge-wrap">
-                  <span class="shared-distance-badge">${sharedDist} km together</span>
+                  <span class="shared-distance-badge" style="font-size: 14px; font-weight: 800; padding: 6px 16px;">${sharedDistStr} km together</span>
                 </div>
                 <div class="hero-connecting-line">
                   <span class="line-dot-left"></span>
                   <div class="line-track"></div>
                   <span class="line-dot-right"></span>
                 </div>
-                <span class="shared-route-subtext">👥 Shared route</span>
+                <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; justify-content:center;">
+                  <span class="shared-route-subtext">${matchPercent}% route fit</span>
+                  ${isScheduleDiff ? `<span class="schedule-diff-badge">Route fits · Different timing</span>` : ''}
+                </div>
               </div>
 
               <div class="hero-point hero-drop">
                 <span class="hero-dot"></span>
                 <div class="hero-point-text" style="text-align: right;">
                   <span class="point-main-name">${escapeHtml(cleanDrop)}</span>
-                  <span class="point-sub-name">Hyderabad</span>
+                  <span class="point-sub-name">Drop point</span>
                 </div>
               </div>
             </div>
@@ -2417,7 +3316,7 @@
                   </div>
                 </div>
                 <div class="meeting-right">
-                  <span>${walkTimeText}</span>
+                  <span>${escapeHtml(walkTimeText)}</span>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
                 </div>
               </div>
@@ -2429,9 +3328,7 @@
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="1 6 1 22 8 18 15 22 22 18 22 2 15 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="15" y1="6" x2="15" y2="22"/></svg>
                 <span>View route</span>
               </button>
-              <button class="btn-card-request-ride" id="btnJoin_${idx}" onclick="openConfirmModal(${idx})">
-                <span>Request to ride together →</span>
-              </button>
+              ${actionButtonHtml}
             </div>
 
           </div>
@@ -2574,11 +3471,11 @@
 
       const baseUrl = window.location.origin + window.location.pathname;
       const shareUrl = `${baseUrl}#journey=${journeyId}`;
-      const shareText = `Hey! I found someone travelling on my route on GoTogether. Maybe you know them or someone going the same way. Check it out:`;
+      const shareText = `Hey! I found someone travelling on my route on GoTogetherRides. Maybe you know them or someone going the same way. Check it out!`;
 
       if (navigator.share) {
         navigator.share({
-          title: "GoTogether",
+          title: "GoTogetherRides",
           text: shareText,
           url: shareUrl
         }).catch(() => {
@@ -2613,11 +3510,11 @@
       document.getElementById("shareModal").style.display = "none";
     });
 
-    function checkDeepLink() {
+    async function checkDeepLink() {
       const hash = window.location.hash;
       const search = window.location.search;
       let targetId = null;
-      
+
       if (hash && hash.includes('journey=')) {
         targetId = hash.split('journey=')[1].split('&')[0];
       } else if (search && search.includes('journey=')) {
@@ -2625,10 +3522,104 @@
         targetId = params.get('journey');
       }
 
-      if (targetId) {
-        setTimeout(() => {
-          viewRouteFromMap(targetId);
-        }, 800);
+      if (!targetId) return;
+
+      const resultsCard = document.getElementById("results");
+      const resultsList = document.getElementById("resultsList");
+      const telemetryChip = document.getElementById("telemetryChip");
+      const resultsRouteSummary = document.getElementById("resultsRouteSummary");
+
+      resultsCard.style.display = "block";
+      telemetryChip.innerHTML = "Checking shared journey...";
+      resultsList.innerHTML = `
+        <div class="skeleton-card">
+          <div class="skeleton-box" style="width: 40%; height: 18px; margin-bottom: 12px;"></div>
+          <div class="skeleton-box" style="width: 80%; height: 36px; margin-bottom: 12px;"></div>
+          <div class="skeleton-box" style="width: 100%; height: 40px;"></div>
+        </div>
+      `;
+
+      try {
+        const res = await fetch(`/api/journeys?searchRadiusKm=20`);
+        const data = await res.json();
+
+        if (data.success && data.journeys) {
+          activeJourneysData = data.journeys;
+          renderNearbyJourneys(activeJourneysData);
+
+          const targetJourney = data.journeys.find(j => j.id === targetId);
+
+          if (targetJourney) {
+            const cleanP = formatCleanArea(targetJourney.pickup_name) || targetJourney.pickup_name;
+            const cleanD = formatCleanArea(targetJourney.drop_name) || targetJourney.drop_name;
+
+            resultsRouteSummary.innerHTML = `Shared Journey: ${escapeHtml(cleanP)} → ${escapeHtml(cleanD)}`;
+
+            const t0 = performance.now();
+            const searchRes = await fetch("/api/match-search", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                aPickup: targetJourney.pickup_name,
+                aDrop: targetJourney.drop_name,
+                aPickupLat: targetJourney.pickup_lat,
+                aPickupLon: targetJourney.pickup_lon,
+                aDropLat: targetJourney.drop_lat,
+                aDropLon: targetJourney.drop_lon,
+                searchRadiusKm: 10
+              })
+            });
+            const t1 = performance.now();
+
+            if (searchRes.ok) {
+              const searchData = await searchRes.json();
+              const evaluated = searchData.candidateCount || (searchData.timing && searchData.timing.candidateCount) || 1;
+              const durMs = (searchData.timing && searchData.timing.totalMs) || (t1 - t0);
+
+              currentMatches = searchData.matches || [];
+              renderMatchResults(currentMatches, { candidateCount: evaluated, totalMs: durMs });
+              
+              const matchIdx = currentMatches.findIndex(m => m.id === targetId || m.journey_id === targetId);
+              if (matchIdx !== -1) {
+                selectMatch(matchIdx);
+                const cardEl = document.getElementById(`matchCard_${matchIdx}`);
+                if (cardEl) {
+                  cardEl.scrollIntoView({ behavior: "smooth", block: "nearest" });
+                }
+              } else if (currentMatches.length) {
+                selectMatch(0);
+              }
+            } else {
+              telemetryChip.innerHTML = "1 shared journey loaded";
+            }
+          } else {
+            telemetryChip.innerHTML = "Journey not found";
+            resultsList.innerHTML = `
+              <div style="text-align: center; color: var(--text-muted); padding: 32px 16px; background: var(--bg-page); border: 1px solid var(--border-color); border-radius: var(--radius-md);">
+                <p style="font-weight: 800; font-size: 16px; margin-bottom: 6px; color: var(--text-heading);">This journey is no longer available.</p>
+                <p style="font-size: 13.5px; line-height: 1.4; margin-bottom: 18px;">It may have been completed, cancelled, or removed by the host.</p>
+                <button type="button" class="btn-primary" style="max-width: 260px; margin: 0 auto; height: 44px;" onclick="focusRideForm()">Find people going your way</button>
+              </div>
+            `;
+          }
+        }
+      } catch (err) {
+        console.error("Error resolving deep link journey:", err);
+        telemetryChip.innerHTML = "Error loading journey";
+        resultsList.innerHTML = `
+          <div style="text-align: center; color: var(--text-muted); padding: 32px 16px;">
+            <p style="font-weight: 800; font-size: 16px; color: var(--text-heading); margin-bottom: 6px;">This journey is no longer available.</p>
+            <button type="button" class="btn-primary" style="max-width: 260px; margin: 16px auto 0;" onclick="focusRideForm()">Find people going your way</button>
+          </div>
+        `;
+      }
+    }
+
+    function focusRideForm() {
+      const pickupInput = document.getElementById("pickup");
+      if (pickupInput) {
+        pickupInput.scrollIntoView({ behavior: "smooth", block: "center" });
+        pickupInput.focus();
       }
     }
 
@@ -2699,6 +3690,7 @@
         const payload = {
           targetJourneyId: m.id,
           requesterJourneyId: currentUserJourneyId,
+          requesterId: currentUserId || undefined,
           requesterName: document.getElementById("name").value.trim() || "Traveler",
           pickupName: document.getElementById("pickup").value.trim(),
           dropName: document.getElementById("drop").value.trim(),
@@ -2712,19 +3704,18 @@
           body: JSON.stringify(payload)
         });
 
-        if (!res.ok) throw new Error("Could not submit request.");
+        const resData = await res.json();
+        if (!res.ok) throw new Error(resData.error || "Could not submit request.");
 
         document.getElementById("confirmModal").style.display = "none";
 
-        const idx = currentMatches.indexOf(m);
-        if (idx !== -1) {
-          const cardBtn = document.getElementById(`btnJoin_${idx}`);
-          if (cardBtn) {
-            cardBtn.classList.add("sent");
-            cardBtn.disabled = true;
-            cardBtn.textContent = "✓ Request sent";
-          }
+        if (resData.request) {
+          activeSentRequestsMap.set(m.id || m.journey_id, resData.request);
+        } else {
+          activeSentRequestsMap.set(m.id || m.journey_id, { status: "pending" });
         }
+
+        renderMatchResults(currentMatches);
 
       } catch (err) {
         alert(err.message || "Failed to send request.");
@@ -2760,48 +3751,54 @@
       });
     });
 
+    function setDepartureTime(val) {
+      const input = document.getElementById("departureTime");
+      if (input) {
+        input.value = val;
+      }
+    }
+
     async function loadJoinRequests() {
       const content = document.getElementById("tripsModalContent");
       content.innerHTML = `<p style="color: var(--text-muted); font-size: 14px; text-align: center; padding: 20px 0;">Loading requests...</p>`;
 
       try {
-        const res = await fetch("/api/join-requests");
+        const queryParams = new URLSearchParams({
+          type: activeTab,
+          userId: currentUserId || '',
+          journeyId: currentUserJourneyId || ''
+        });
+
+        const res = await fetch(`/api/join-requests?${queryParams.toString()}`);
         const data = await res.json();
 
         if (!res.ok || !data.requests || !data.requests.length) {
-          content.innerHTML = `<p style="color: var(--text-muted); font-size: 14px; text-align: center; padding: 30px 0;">No active requests found.</p>`;
+          content.innerHTML = `<p style="color: var(--text-muted); font-size: 14px; text-align: center; padding: 30px 0;">No ${activeTab === 'received' ? 'received' : 'sent'} requests found.</p>`;
           return;
         }
 
         let filtered = data.requests;
 
-        if (activeTab === "received") {
-          filtered = currentUserJourneyId ? data.requests.filter(r => r.target_journey_id === currentUserJourneyId) : data.requests;
-        } else if (activeTab === "sent") {
-          filtered = currentUserJourneyId ? data.requests.filter(r => r.requester_journey_id === currentUserJourneyId) : data.requests;
-        }
-
-        if (!filtered.length) {
-          content.innerHTML = `<p style="color: var(--text-muted); font-size: 14px; text-align: center; padding: 30px 0;">No ${activeTab} requests.</p>`;
-          return;
-        }
-
         let html = '';
         filtered.forEach(req => {
           const badgeHtml = req.status === 'accepted'
-            ? `<span style="color:var(--route-shared); background:#ecfdf5; padding:2px 8px; border-radius:10px; font-size:12px;">✓ Accepted</span>`
+            ? `<span style="color:var(--route-shared); background:#ecfdf5; padding:2px 8px; border-radius:10px; font-size:12px; font-weight:700;">✓ Accepted</span>`
             : req.status === 'rejected'
-            ? `<span style="color:#e11d48; background:#ffe4e6; padding:2px 8px; border-radius:10px; font-size:12px;">✕ Declined</span>`
-            : `<span style="color:#d97706; background:#fef3c7; padding:2px 8px; border-radius:10px; font-size:12px;">⌛ Waiting for response</span>`;
+            ? `<span style="color:#e11d48; background:#ffe4e6; padding:2px 8px; border-radius:10px; font-size:12px; font-weight:700;">✕ Declined</span>`
+            : `<span style="color:#d97706; background:#fef3c7; padding:2px 8px; border-radius:10px; font-size:12px; font-weight:700;">⌛ Waiting for response</span>`;
+
+          const headerTitle = activeTab === 'received'
+            ? `🚗 ${escapeHtml(req.requester_name || "Commuter")}`
+            : `🚗 Request to ${escapeHtml(req.target_host_name || "Host Driver")}`;
 
           html += `
             <div class="request-card">
               <div class="request-card-header">
-                <span>🚗 ${escapeHtml(req.requester_name)}</span>
+                <span style="font-weight: 800; color: var(--text-heading); font-size: 14.5px;">${headerTitle}</span>
                 ${badgeHtml}
               </div>
-              <div style="font-size: 13.5px; color: var(--text-body); margin-bottom: 8px;">
-                ${escapeHtml(formatCleanArea(req.pickup_name))} → ${escapeHtml(formatCleanArea(req.drop_name))}
+              <div style="font-size: 13.5px; color: var(--text-body); margin-bottom: 8px; font-weight: 600;">
+                Route: ${escapeHtml(formatCleanArea(req.pickup_name))} → ${escapeHtml(formatCleanArea(req.drop_name))}
               </div>
               ${req.status === 'pending' && activeTab === 'received' ? `
                 <div style="display: flex; gap: 8px; margin-top: 10px;">
@@ -2809,14 +3806,131 @@
                   <button class="btn-action-reject" onclick="updateReqStatus('${req.id}', 'rejected')">Decline</button>
                 </div>
               ` : ''}
+              ${req.status === 'accepted' ? `
+                <div id="chatContainer_${req.id}"></div>
+              ` : ''}
             </div>
           `;
         });
 
         content.innerHTML = html;
 
+        filtered.forEach(req => {
+          if (req.status === 'accepted') {
+            setTimeout(() => loadChatForRequest(req.id, `chatContainer_${req.id}`), 50);
+          }
+        });
+
       } catch (err) {
         content.innerHTML = `<p style="color: #e11d48; font-size: 14px; text-align: center;">Could not load requests.</p>`;
+      }
+    }
+
+    async function loadChatForRequest(requestId, containerId) {
+      const container = document.getElementById(containerId);
+      if (!container) return;
+
+      try {
+        const queryParams = new URLSearchParams();
+        if (currentUserId) queryParams.append("userId", currentUserId);
+
+        const res = await fetch(`/api/conversations/${requestId}?${queryParams.toString()}`);
+        const data = await res.json();
+
+        if (!res.ok || !data.conversation) {
+          container.innerHTML = `<div style="font-size:12px; color:var(--text-muted); text-align:center; padding:8px;">Chat unavailable.</div>`;
+          return;
+        }
+
+        const conv = data.conversation;
+        const msgs = data.messages || [];
+        const myUserId = currentUserId || getStoredUserId();
+
+        const sortedMsgs = [...msgs].sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0));
+        const seenMsgIds = new Set();
+
+        let msgHtml = '';
+        if (!sortedMsgs.length) {
+          msgHtml = `<div style="font-size:12px; color:var(--text-muted); text-align:center; padding:12px;">No messages yet. Send a quick message below!</div>`;
+        } else {
+          sortedMsgs.forEach(m => {
+            if (m.id && seenMsgIds.has(m.id)) return;
+            if (m.id) seenMsgIds.add(m.id);
+
+            const senderId = m.sender_id || m.sender_user_id;
+            const isMe = Boolean(myUserId && senderId && senderId === myUserId);
+            const displayName = isMe ? "You" : (m.sender_name || "Commuter");
+            const timeStr = formatTime12H(m.created_at ? new Date(m.created_at).toTimeString().substring(0, 5) : '');
+            const readStatus = m.read_at ? '✓✓ Read' : '✓ Sent';
+
+            msgHtml += `
+              <div class="chat-bubble ${isMe ? 'chat-bubble-me' : 'chat-bubble-other'}">
+                <span class="chat-msg-sender">${escapeHtml(displayName)}</span>
+                <span>${escapeHtml(m.quick_message_text || m.text || '')}</span>
+                <span class="chat-msg-meta">${escapeHtml(timeStr)} · ${escapeHtml(readStatus)}</span>
+              </div>
+            `;
+          });
+        }
+
+        container.innerHTML = `
+          <div class="chat-box-card">
+            <div class="chat-header-row">
+              <span class="chat-title-text">💬 Ride Chat</span>
+              <span style="font-size:11px; color:var(--route-shared); font-weight:700;">✓ Active</span>
+            </div>
+            <div class="chat-messages-container" id="chatMsgList_${conv.id}">
+              ${msgHtml}
+            </div>
+            <div class="quick-messages-section">
+              <span class="quick-msg-label">Send Quick Message (No free text):</span>
+              <div class="quick-msg-chips-grid">
+                <button type="button" class="quick-msg-pill" onclick="sendQuickMessage('${conv.id}', '${requestId}', 'where_meet')">Where should we meet?</button>
+                <button type="button" class="quick-msg-pill" onclick="sendQuickMessage('${conv.id}', '${requestId}', 'near_metro')">Can we meet near the metro?</button>
+                <button type="button" class="quick-msg-pill" onclick="sendQuickMessage('${conv.id}', '${requestId}', 'around_time')">I'll be there around departure time.</button>
+                <button type="button" class="quick-msg-pill" onclick="sendQuickMessage('${conv.id}', '${requestId}', 'ready_leave')">I'm ready to leave.</button>
+                <button type="button" class="quick-msg-pill" onclick="sendQuickMessage('${conv.id}', '${requestId}', 'thanks_see_you')">Thanks, see you there.</button>
+              </div>
+            </div>
+          </div>
+        `;
+
+        const listEl = document.getElementById(`chatMsgList_${conv.id}`);
+        if (listEl) listEl.scrollTop = listEl.scrollHeight;
+
+        fetch(`/api/conversations/${conv.id}/read`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ readerUserId: myUserId })
+        }).catch(() => {});
+
+      } catch (e) {
+        container.innerHTML = `<div style="font-size:12px; color:#e11d48; text-align:center;">Could not load chat.</div>`;
+      }
+    }
+
+    async function sendQuickMessage(convId, requestId, quickMessageKey) {
+      const currentName = document.getElementById("name").value.trim() || "Commuter";
+      const myUserId = currentUserId || getStoredUserId();
+      try {
+        const res = await fetch(`/api/conversations/${convId}/messages`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            senderId: myUserId || currentUserJourneyId || "user-local",
+            senderName: currentName,
+            quickMessageKey
+          })
+        });
+
+        if (res.ok) {
+          loadChatForRequest(requestId, `chatContainer_${requestId}`);
+        } else {
+          const err = await res.json();
+          alert(err.error || "Could not send message.");
+        }
+      } catch (e) {
+        console.error("Send message error:", e);
       }
     }
 
@@ -2825,10 +3939,17 @@
         const res = await fetch(`/api/join-requests/${id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ status: newStatus })
+          body: JSON.stringify({
+            status: newStatus,
+            userId: currentUserId,
+            userJourneyId: currentUserJourneyId
+          })
         });
         if (res.ok) {
           loadJoinRequests();
+        } else {
+          const errData = await res.json();
+          alert(errData.error || "Could not update request status.");
         }
       } catch (e) {
         console.error("Status update error:", e);
@@ -2856,6 +3977,11 @@
       dInput.removeAttribute("data-lon");
       document.getElementById("dropClear").style.display = "none";
 
+      const summaryText = document.getElementById("userRouteSummaryText");
+      if (summaryText) {
+        summaryText.innerHTML = "Select pickup and drop to see your route.";
+      }
+
       document.getElementById("departureDate").value = todayStr;
       document.getElementById("departureTime").value = "08:30";
       document.getElementById("results").style.display = "none";
@@ -2867,6 +3993,231 @@
       map.setView([17.385, 78.4867], 11);
       loadNearbyJourneys();
     });
+
+    async function cancelJoinRequest(reqId, targetJId) {
+      if (!reqId) return;
+      try {
+        const res = await fetch(`/api/join-requests/${reqId}`, {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" }
+        });
+        if (res.ok) {
+          if (targetJId) activeSentRequestsMap.delete(targetJId);
+          renderMatchResults(currentMatches);
+        } else {
+          alert("Could not cancel request.");
+        }
+      } catch (e) {
+        console.error("Cancel request error:", e);
+      }
+    }
+
+    /*
+    ==================================================
+    AUTHENTICATION & USER SESSION (SUPABASE AUTH INTEGRATION)
+    ==================================================
+    */
+    let authenticatedUser = null;
+
+    async function initSupabaseAuth() {
+      try {
+        const res = await fetch("/api/config");
+        const cfg = await res.json();
+        if (window.supabase && cfg.supabaseUrl && cfg.supabaseAnonKey && !cfg.supabaseUrl.includes("placeholder")) {
+          window.supabaseClient = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey);
+          
+          const { data: { session } } = await window.supabaseClient.auth.getSession();
+          if (session && session.user) {
+            handleSupabaseUserSession(session.user);
+          }
+
+          window.supabaseClient.auth.onAuthStateChange((_event, session) => {
+            if (session && session.user) {
+              handleSupabaseUserSession(session.user);
+            }
+          });
+        }
+      } catch (e) {
+        console.warn("Supabase auth init warning:", e);
+      }
+    }
+
+    async function handleSupabaseUserSession(user) {
+      const name = user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || "Commuter";
+      const email = user.email;
+      try {
+        const res = await fetch("/api/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, email, userId: user.id })
+        });
+        const data = await res.json();
+        if (res.ok && data.profile) {
+          setStoredUserSession(data.profile);
+        } else {
+          setStoredUserSession({ id: user.id, name, email });
+        }
+      } catch (e) {
+        setStoredUserSession({ id: user.id, name, email });
+      }
+    }
+
+    function getStoredUserSession() {
+      try {
+        const s = sessionStorage.getItem("gotogether_user_session");
+        return s ? JSON.parse(s) : null;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function setStoredUserSession(userObj) {
+      try {
+        if (userObj) {
+          sessionStorage.setItem("gotogether_user_session", JSON.stringify(userObj));
+          authenticatedUser = userObj;
+          currentUserId = userObj.id;
+          setStoredUserId(currentUserId);
+          const nameInput = document.getElementById("name");
+          if (nameInput && userObj.name) nameInput.value = userObj.name;
+        } else {
+          sessionStorage.removeItem("gotogether_user_session");
+          authenticatedUser = null;
+          currentUserId = null;
+          setStoredUserId(null);
+        }
+        updateAuthUI();
+      } catch (e) {}
+    }
+
+    function updateAuthUI() {
+      const label = document.getElementById("authBtnLabel");
+      const btn = document.getElementById("btnAuthModal");
+      if (!label || !btn) return;
+
+      if (authenticatedUser && authenticatedUser.name) {
+        label.textContent = `👤 ${authenticatedUser.name.split(' ')[0]}`;
+        btn.title = "Click to sign out";
+      } else {
+        label.textContent = "Sign In";
+        btn.title = "Sign in to GoTogether";
+      }
+    }
+
+    document.getElementById("btnAuthModal").addEventListener("click", () => {
+      if (authenticatedUser) {
+        if (confirm(`Signed in as ${authenticatedUser.name}. Do you want to sign out?`)) {
+          setStoredUserSession(null);
+        }
+      } else {
+        document.getElementById("authModal").style.display = "flex";
+      }
+    });
+
+    document.getElementById("btnCloseAuth").addEventListener("click", () => {
+      document.getElementById("authModal").style.display = "none";
+    });
+
+    document.getElementById("btnGoogleAuth").addEventListener("click", async () => {
+      if (window.supabaseClient) {
+        const { error } = await window.supabaseClient.auth.signInWithOAuth({
+          provider: 'google',
+          options: { redirectTo: window.location.origin }
+        });
+        if (error) alert(error.message || "Google sign in failed.");
+      } else {
+        document.getElementById("authName").focus();
+        alert("Google Sign-In requires Supabase Auth OAuth configuration. You can also type your profile name below to sign in.");
+      }
+    });
+
+    document.getElementById("btnSubmitAuth").addEventListener("click", async () => {
+      const nameInput = document.getElementById("authName");
+      const emailInput = document.getElementById("authEmail");
+      const name = nameInput.value.trim();
+      const email = emailInput.value.trim();
+
+      if (!name) {
+        alert("Please enter your name.");
+        return;
+      }
+
+      try {
+        const res = await fetch("/api/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, email })
+        });
+
+        const data = await res.json();
+        if (!res.ok || !data.profile) throw new Error(data.error || "Sign in failed.");
+
+        setStoredUserSession(data.profile);
+        document.getElementById("authModal").style.display = "none";
+      } catch (e) {
+        alert(e.message || "Sign in failed.");
+      }
+    });
+
+    const initSession = getStoredUserSession();
+    if (initSession) setStoredUserSession(initSession);
+    initSupabaseAuth();
+
+    /*
+    ==================================================
+    CONVERSATIONS MENU
+    ==================================================
+    */
+    document.getElementById("btnConversationsModal").addEventListener("click", () => {
+      document.getElementById("conversationsModal").style.display = "flex";
+      loadUserConversations();
+    });
+
+    document.getElementById("btnCloseConversations").addEventListener("click", () => {
+      document.getElementById("conversationsModal").style.display = "none";
+    });
+
+    async function loadUserConversations() {
+      const container = document.getElementById("conversationsModalContent");
+      container.innerHTML = `<p style="color: var(--text-muted); font-size: 14px; text-align: center; padding: 20px 0;">Loading conversations...</p>`;
+
+      const myUserId = currentUserId || getStoredUserId();
+      if (!myUserId) {
+        container.innerHTML = `<p style="color: var(--text-muted); font-size: 13.5px; text-align: center; padding: 24px 16px;">Please sign in or create a journey first to view your ride conversations.</p>`;
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/conversations?userId=${encodeURIComponent(myUserId)}`);
+        const data = await res.json();
+
+        if (!res.ok || !data.conversations || !data.conversations.length) {
+          container.innerHTML = `<p style="color: var(--text-muted); font-size: 13.5px; text-align: center; padding: 24px 16px;">No active ride conversations yet. Conversations are created automatically when a ride request is accepted.</p>`;
+          return;
+        }
+
+        let html = '';
+        data.conversations.forEach(conv => {
+          const partnerName = (conv.target_host_user_id === myUserId) ? (conv.requester_name || "Commuter") : (conv.target_host_name || "Host Driver");
+          html += `
+            <div class="request-card" style="cursor:pointer;" onclick="document.getElementById('conversationsModal').style.display='none'; openTripsModalWithChat('${conv.id}')">
+              <div class="request-card-header">
+                <span style="font-weight: 800; color: var(--text-heading); font-size: 14.5px;">💬 ${escapeHtml(partnerName)}</span>
+                <span style="color:var(--route-shared); background:#ecfdf5; padding:2px 8px; border-radius:10px; font-size:12px; font-weight:700;">Active Chat</span>
+              </div>
+              <div style="font-size: 13px; color: var(--text-body); margin-bottom: 4px;">
+                Route: ${escapeHtml(formatCleanArea(conv.pickup_name))} → ${escapeHtml(formatCleanArea(conv.drop_name))}
+              </div>
+              <button type="button" style="margin-top:6px; background:var(--route-my); color:#fff; border:none; padding:6px 12px; border-radius:6px; font-size:12px; font-weight:700; cursor:pointer;">Open Chat →</button>
+            </div>
+          `;
+        });
+
+        container.innerHTML = html;
+      } catch (e) {
+        container.innerHTML = `<p style="color: #e11d48; font-size: 13.5px; text-align: center; padding: 20px 0;">Could not load conversations.</p>`;
+      }
+    }
 
     document.getElementById("find").addEventListener("click", findPeople);
 
