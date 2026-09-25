@@ -25,6 +25,7 @@ const routeCache = new Map();
 const inMemoryJoinRequests = [];
 const inMemoryConversations = [];
 const inMemoryMessages = [];
+const inMemoryNotifications = [];
 
 const APPROVED_QUICK_MESSAGES = {
   "where_meet": "Where should we meet?",
@@ -33,6 +34,7 @@ const APPROVED_QUICK_MESSAGES = {
   "ready_leave": "I'm ready to leave.",
   "thanks_see_you": "Thanks, see you there."
 };
+
 const SEED_JOURNEYS = [
   {
     id: "j-seed-1",
@@ -97,7 +99,38 @@ const SEED_JOURNEYS = [
 ];
 
 const inMemoryJourneys = process.env.NODE_ENV === "test" ? [...SEED_JOURNEYS] : [];
-const SESSION_CUTOFF_TIMESTAMP = new Date("2026-09-23T00:00:00.000Z").getTime();
+const SESSION_CUTOFF_TIMESTAMP = new Date("2026-09-25T16:30:00.000Z").getTime();
+
+async function sendNotification({ userId, title, message, type, referenceId }) {
+  if (!userId) return null;
+  const notifPayload = {
+    user_id: userId,
+    title,
+    message,
+    type: type || "general",
+    reference_id: referenceId ? String(referenceId) : null,
+    created_at: new Date().toISOString()
+  };
+  let notif = null;
+  try {
+    const { data, error } = await supabase
+      .from("notifications")
+      .insert(notifPayload)
+      .select()
+      .single();
+    if (!error && data) notif = data;
+  } catch (e) {}
+
+  if (!notif) {
+    notif = {
+      id: `notif-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      ...notifPayload,
+      read_at: null
+    };
+  }
+  inMemoryNotifications.unshift(notif);
+  return notif;
+}
 
 function getRouteCacheKey(a, b) {
   return `${a.lat.toFixed(4)},${a.lon.toFixed(4)}->${b.lat.toFixed(4)},${b.lon.toFixed(4)}`;
@@ -618,20 +651,16 @@ apiRouter.post("/journeys", async (req, res) => {
     const targetDate = departureDate || todayStr;
     const targetTime = departureTime ? (departureTime.length === 5 ? `${departureTime}:00` : departureTime) : defaultTimeStr;
 
-    // IDEMPOTENCE CHECK: Reuse existing active journey if details match (exclude seed journeys)
-    const existingInMemory = inMemoryJourneys.find(j => 
+    // DUPLICATE JOURNEY PREVENTION: Reuse existing active journey for the SAME authenticated user ID if details match
+    const userId = req.body.userId;
+    const existingInMemory = userId ? inMemoryJourneys.find(j => 
       j.status === "active" &&
       !j.id.startsWith("j-seed-") &&
-      (j.id === req.body.requesterJourneyId || 
-       (req.body.userId && j.user_id === req.body.userId) ||
-       (j.profiles?.name?.toLowerCase() === name.toLowerCase() &&
-        j.pickup_name?.toLowerCase() === pickup.toLowerCase() &&
-        j.drop_name?.toLowerCase() === drop.toLowerCase() &&
-        (j.departure_date === targetDate || !j.departure_date) &&
-        (j.departure_time?.substring(0, 5) === targetTime.substring(0, 5) || !j.departure_time)
-       )
-      )
-    );
+      j.user_id === userId &&
+      j.pickup_name?.toLowerCase() === pickup.toLowerCase() &&
+      j.drop_name?.toLowerCase() === drop.toLowerCase() &&
+      (j.departure_date === targetDate || !j.departure_date)
+    ) : null;
 
     if (existingInMemory) {
       return res.json({
@@ -653,70 +682,70 @@ apiRouter.post("/journeys", async (req, res) => {
     }
 
     try {
-      let queryRes = await supabase
-        .from("journeys")
-        .select(`
-          id, user_id, pickup_name, pickup_lat, pickup_lon, drop_name, drop_lat, drop_lon,
-          departure_date, departure_time, status, bearing_degrees, route_distance_meters,
-          profiles ( id, name )
-        `)
-        .eq("status", "active")
-        .order("created_at", { ascending: false });
-
-      if (queryRes.error && queryRes.error.message.includes("column")) {
-        queryRes = await supabase
+      if (userId) {
+        let queryRes = await supabase
           .from("journeys")
           .select(`
             id, user_id, pickup_name, pickup_lat, pickup_lon, drop_name, drop_lat, drop_lon,
-            status, profiles ( id, name )
+            departure_date, departure_time, status, bearing_degrees, route_distance_meters,
+            profiles ( id, name )
           `)
           .eq("status", "active")
+          .eq("user_id", userId)
           .order("created_at", { ascending: false });
-      }
 
-      if (!queryRes.error && Array.isArray(queryRes.data)) {
-        const match = queryRes.data.find(j => {
-          if (j.id === req.body.requesterJourneyId || j.user_id === req.body.userId) return true;
-          const pName = Array.isArray(j.profiles) ? j.profiles[0]?.name : j.profiles?.name;
-          const nameMatch = pName ? pName.toLowerCase() === name.toLowerCase() : true;
-          const pickupMatch = j.pickup_name?.toLowerCase() === pickup.toLowerCase() ||
-            haversineKm(j.pickup_lat, j.pickup_lon, pickupGeo.lat, pickupGeo.lon) <= 0.5;
-          const dropMatch = j.drop_name?.toLowerCase() === drop.toLowerCase() ||
-            haversineKm(j.drop_lat, j.drop_lon, dropGeo.lat, dropGeo.lon) <= 0.5;
-          const dateMatch = !j.departure_date || j.departure_date === targetDate;
-          return nameMatch && pickupMatch && dropMatch && dateMatch;
-        });
+        if (queryRes.error && queryRes.error.message.includes("column")) {
+          queryRes = await supabase
+            .from("journeys")
+            .select(`
+              id, user_id, pickup_name, pickup_lat, pickup_lon, drop_name, drop_lat, drop_lon,
+              status, profiles ( id, name )
+            `)
+            .eq("status", "active")
+            .eq("user_id", userId)
+            .order("created_at", { ascending: false });
+        }
 
-        if (match) {
-          const reusedJ = {
-            ...match,
-            id: match.id,
-            user_id: req.body.userId || match.user_id,
-            original_user_id: req.body.userId || match.user_id,
-            departure_date: match.departure_date || targetDate,
-            departure_time: match.departure_time || targetTime,
-            profiles: (Array.isArray(match.profiles) ? match.profiles[0] : match.profiles) || { id: match.user_id, name }
-          };
-          if (!inMemoryJourneys.some(j => j.id === match.id)) {
-            inMemoryJourneys.unshift(reusedJ);
-          }
+        if (!queryRes.error && Array.isArray(queryRes.data)) {
+          const match = queryRes.data.find(j => {
+            const pickupMatch = j.pickup_name?.toLowerCase() === pickup.toLowerCase() ||
+              haversineKm(j.pickup_lat, j.pickup_lon, pickupGeo.lat, pickupGeo.lon) <= 0.5;
+            const dropMatch = j.drop_name?.toLowerCase() === drop.toLowerCase() ||
+              haversineKm(j.drop_lat, j.drop_lon, dropGeo.lat, dropGeo.lon) <= 0.5;
+            const dateMatch = !j.departure_date || j.departure_date === targetDate;
+            return pickupMatch && dropMatch && dateMatch;
+          });
 
-          return res.json({
-            success: true,
-            reused: true,
-            profile: reusedJ.profiles,
-            journey: {
+          if (match) {
+            const reusedJ = {
+              ...match,
               id: match.id,
-              user_id: reusedJ.user_id,
-              pickup: { name: match.pickup_name || pickup, lat: match.pickup_lat, lon: match.pickup_lon },
-              drop: { name: match.drop_name || drop, lat: match.drop_lat, lon: match.drop_lon },
+              user_id: userId,
               departure_date: match.departure_date || targetDate,
               departure_time: match.departure_time || targetTime,
-              status: match.status,
-              bearing_degrees: match.bearing_degrees || null,
-              route_distance_km: match.route_distance_meters ? Math.round((match.route_distance_meters / 1000) * 10) / 10 : null
+              profiles: (Array.isArray(match.profiles) ? match.profiles[0] : match.profiles) || { id: userId, name }
+            };
+            if (!inMemoryJourneys.some(j => j.id === match.id)) {
+              inMemoryJourneys.unshift(reusedJ);
             }
-          });
+
+            return res.json({
+              success: true,
+              reused: true,
+              profile: reusedJ.profiles,
+              journey: {
+                id: match.id,
+                user_id: reusedJ.user_id,
+                pickup: { name: match.pickup_name || pickup, lat: match.pickup_lat, lon: match.pickup_lon },
+                drop: { name: match.drop_name || drop, lat: match.drop_lat, lon: match.drop_lon },
+                departure_date: match.departure_date || targetDate,
+                departure_time: match.departure_time || targetTime,
+                status: match.status,
+                bearing_degrees: match.bearing_degrees || null,
+                route_distance_km: match.route_distance_meters ? Math.round((match.route_distance_meters / 1000) * 10) / 10 : null
+              }
+            });
+          }
         }
       }
     } catch (e) {
@@ -1538,7 +1567,6 @@ apiRouter.post("/join-requests", async (req, res) => {
     if (!result.error && result.data) {
       createdReq = result.data;
       inMemoryJoinRequests.unshift(createdReq);
-      return res.json({ success: true, request: createdReq, storage: "supabase" });
     } else {
       createdReq = {
         id: `local-req-${Date.now()}-${Math.floor(Math.random()*1000)}`,
@@ -1546,8 +1574,30 @@ apiRouter.post("/join-requests", async (req, res) => {
         created_at: new Date().toISOString()
       };
       inMemoryJoinRequests.unshift(createdReq);
-      return res.json({ success: true, request: createdReq, storage: "in_memory" });
     }
+
+    // Trigger Notification to Target Host User
+    try {
+      const targetJ = inMemoryJourneys.find(j => j.id === targetId);
+      let targetHostUserId = (targetJ && targetJ.user_id);
+      if (!targetHostUserId) {
+        const { data: tjData } = await supabase.from("journeys").select("user_id").eq("id", targetId).maybeSingle();
+        if (tjData) targetHostUserId = tjData.user_id;
+      }
+      if (targetHostUserId) {
+        await sendNotification({
+          userId: targetHostUserId,
+          title: "New Ride Request 🚗",
+          message: `${requesterName} requested to ride together: ${pickupName} → ${dropName}`,
+          type: "request_received",
+          referenceId: createdReq.id
+        });
+      }
+    } catch (notifErr) {
+      console.warn("Notification send warning:", notifErr.message);
+    }
+
+    return res.json({ success: true, request: createdReq });
 
   } catch (error) {
     console.error("Join request error:", error);
@@ -1742,6 +1792,27 @@ apiRouter.patch("/join-requests/:id", async (req, res) => {
           .select()
           .maybeSingle();
       } catch (convErr) {}
+
+      // Trigger Notification for Requester User
+      if (requesterUserId) {
+        await sendNotification({
+          userId: requesterUserId,
+          title: "Ride Request Accepted! 🎉",
+          message: `${targetHostUserId ? "Host driver" : "Driver"} accepted your ride request!`,
+          type: "request_accepted",
+          referenceId: id
+        });
+      }
+    } else if (status === "rejected") {
+      if (requesterUserId) {
+        await sendNotification({
+          userId: requesterUserId,
+          title: "Ride Request Declined",
+          message: `Your ride request was declined.`,
+          type: "request_declined",
+          referenceId: id
+        });
+      }
     }
 
     res.json({ success: true, request: updatedReq });
@@ -2157,6 +2228,25 @@ apiRouter.post("/conversations/:conversationId/messages", async (req, res) => {
       inMemoryMessages.push(insertedMessage);
     }
 
+    // Trigger Notification for Message Recipient
+    if (joinReq) {
+      const targetJ = inMemoryJourneys.find(j => j.id === joinReq.target_journey_id);
+      const reqJ = inMemoryJourneys.find(j => j.id === joinReq.requester_journey_id);
+      const targetHostUserId = (targetJ && targetJ.user_id) || joinReq.target_host_user_id;
+      const requesterUserId = joinReq.requester_id || (reqJ && reqJ.user_id) || joinReq.requester_user_id;
+
+      const recipientUserId = (senderId === targetHostUserId) ? requesterUserId : targetHostUserId;
+      if (recipientUserId && recipientUserId !== senderId) {
+        await sendNotification({
+          userId: recipientUserId,
+          title: "New Ride Message 💬",
+          message: `${senderName || "Commuter"}: ${quickMessageText}`,
+          type: "chat_message",
+          referenceId: conversationId
+        });
+      }
+    }
+
     res.json({
       success: true,
       message: insertedMessage
@@ -2165,6 +2255,78 @@ apiRouter.post("/conversations/:conversationId/messages", async (req, res) => {
   } catch (error) {
     console.error("Post message error:", error);
     res.status(500).json({ error: error.message || "Could not send message." });
+  }
+});
+
+/*
+GET NOTIFICATIONS (GET /api/notifications)
+*/
+apiRouter.get("/notifications", async (req, res) => {
+  try {
+    const { userId } = req.query || {};
+    if (!userId) {
+      return res.json({ success: true, unreadCount: 0, notifications: [] });
+    }
+
+    let dbNotifs = [];
+    try {
+      const { data, error } = await supabase
+        .from("notifications")
+        .select("*")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false });
+
+      if (!error && Array.isArray(data)) {
+        dbNotifs = data;
+      }
+    } catch (e) {}
+
+    const notifMap = new Map();
+    inMemoryNotifications.filter(n => n.user_id === userId).forEach(n => notifMap.set(n.id, n));
+    dbNotifs.forEach(n => notifMap.set(n.id, n));
+
+    const notifications = Array.from(notifMap.values()).sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+    const unreadCount = notifications.filter(n => !n.read_at).length;
+
+    res.json({
+      success: true,
+      unreadCount,
+      notifications
+    });
+  } catch (error) {
+    console.error("Get notifications error:", error);
+    res.status(500).json({ error: error.message || "Could not fetch notifications." });
+  }
+});
+
+/*
+MARK NOTIFICATIONS AS READ (PATCH /api/notifications/read)
+*/
+apiRouter.patch("/notifications/read", async (req, res) => {
+  try {
+    const { userId } = req.body || req.query || {};
+    const nowIso = new Date().toISOString();
+
+    if (userId) {
+      try {
+        await supabase
+          .from("notifications")
+          .update({ read_at: nowIso })
+          .eq("user_id", userId)
+          .is("read_at", null);
+      } catch (e) {}
+
+      inMemoryNotifications.forEach(n => {
+        if (n.user_id === userId && !n.read_at) {
+          n.read_at = nowIso;
+        }
+      });
+    }
+
+    res.json({ success: true, readAt: nowIso });
+  } catch (error) {
+    console.error("Mark notifications read error:", error);
+    res.status(500).json({ error: error.message || "Could not mark notifications as read." });
   }
 });
 

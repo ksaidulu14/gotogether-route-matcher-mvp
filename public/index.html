@@ -1628,6 +1628,10 @@
         </div>
       </a>
       <div class="nav-actions" style="display:flex; gap:8px; align-items:center;">
+        <button id="btnNotificationsModal" class="btn-trips-modal" style="display:inline-flex;">
+          <span>🔔</span>
+          <span id="notificationBadge" class="badge-count" style="display:none;">0</span>
+        </button>
         <button id="btnConversationsModal" class="btn-trips-modal" style="display:inline-flex;">
           <span>💬 Chats</span>
         </button>
@@ -1900,7 +1904,20 @@
     </div>
   </div>
 
-  <!-- SIGN IN / AUTH MODAL -->
+  <!-- NOTIFICATIONS MODAL -->
+  <div id="notificationsModal" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title">🔔 Notifications</h3>
+        <button class="btn-close-modal" id="btnCloseNotifications">✕</button>
+      </div>
+      <div id="notificationsModalContent">
+        <p style="color: var(--text-muted); font-size: 14px; text-align: center; padding: 20px 0;">Loading notifications...</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- SIGN IN / AUTH MODAL (MANDATORY REAL SUPABASE AUTH) -->
   <div id="authModal" class="modal-overlay">
     <div class="modal-card" style="max-width: 400px;">
       <div class="modal-header">
@@ -1908,7 +1925,7 @@
         <button class="btn-close-modal" id="btnCloseAuth">✕</button>
       </div>
       <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px;">
-        Sign in to manage your rides, receive ride requests, and chat with matched commuters.
+        Sign in to create journeys, send ride requests, and chat with matched commuters.
       </p>
 
       <button id="btnGoogleAuth" class="btn-primary" type="button" style="background:#4285f4; margin-bottom:16px; width:100%; display:flex; align-items:center; justify-content:center; gap:8px;">
@@ -1917,20 +1934,24 @@
       </button>
 
       <div style="text-align:center; font-size:12px; color:var(--text-muted); margin-bottom:14px; position:relative;">
-        <span style="background:#fff; padding:0 8px; position:relative; z-index:1;">or continue with profile name</span>
+        <span style="background:#fff; padding:0 8px; position:relative; z-index:1;">or sign in with email</span>
         <div style="position:absolute; top:50%; left:0; right:0; height:1px; background:var(--border-color); z-index:0;"></div>
       </div>
 
       <div class="form-grid">
         <div class="field">
-          <label class="field-label" for="authName">Your Full Name</label>
-          <input id="authName" type="text" placeholder="e.g. Rahul Sharma" autocomplete="name">
+          <label class="field-label" for="authEmail">Email Address</label>
+          <input id="authEmail" type="email" placeholder="name@example.com" autocomplete="email">
         </div>
         <div class="field">
-          <label class="field-label" for="authEmail">Email Address (Optional)</label>
-          <input id="authEmail" type="text" placeholder="name@example.com" autocomplete="email">
+          <label class="field-label" for="authPassword">Password</label>
+          <input id="authPassword" type="password" placeholder="Enter password..." autocomplete="current-password">
         </div>
-        <button id="btnSubmitAuth" class="btn-secondary" type="button">Sign In with Name</button>
+        <div style="display:flex; gap:8px;">
+          <button id="btnSubmitAuthSignIn" class="btn-primary" type="button" style="flex:1;">Sign In</button>
+          <button id="btnSubmitAuthSignUp" class="btn-secondary" type="button" style="flex:1;">Sign Up</button>
+        </div>
+        <div id="authStatusMsg" style="font-size:12px; color:var(--text-muted); text-align:center; margin-top:8px;"></div>
       </div>
     </div>
   </div>
@@ -4014,6 +4035,82 @@
 
     /*
     ==================================================
+    NOTIFICATIONS SYSTEM (PERSISTED & REAL-TIME BADGE)
+    ==================================================
+    */
+    async function loadUserNotifications() {
+      const myUserId = currentUserId || getStoredUserId();
+      const badge = document.getElementById("notificationBadge");
+      if (!myUserId) {
+        if (badge) badge.style.display = "none";
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/notifications?userId=${encodeURIComponent(myUserId)}`);
+        const data = await res.json();
+        if (res.ok && data.notifications) {
+          if (badge) {
+            if (data.unreadCount > 0) {
+              badge.textContent = data.unreadCount;
+              badge.style.display = "inline-block";
+            } else {
+              badge.style.display = "none";
+            }
+          }
+
+          const content = document.getElementById("notificationsModalContent");
+          if (content && document.getElementById("notificationsModal").style.display === "flex") {
+            if (!data.notifications.length) {
+              content.innerHTML = `<p style="color: var(--text-muted); font-size: 13.5px; text-align: center; padding: 24px 16px;">No notifications yet.</p>`;
+            } else {
+              let html = '';
+              data.notifications.forEach(n => {
+                const timeAgo = formatTime12H(n.created_at ? new Date(n.created_at).toTimeString().substring(0, 5) : '');
+                const unreadDot = !n.read_at ? `<span style="display:inline-block; width:8px; height:8px; background:var(--route-my); border-radius:50%; margin-right:6px;"></span>` : '';
+                html += `
+                  <div class="request-card" style="${!n.read_at ? 'background:#eff6ff; border-color:#bfdbfe;' : ''}">
+                    <div class="request-card-header">
+                      <span style="font-weight:800; font-size:14px; color:var(--text-heading);">${unreadDot}${escapeHtml(n.title)}</span>
+                      <span style="font-size:11px; color:var(--text-muted);">${escapeHtml(timeAgo)}</span>
+                    </div>
+                    <div style="font-size:13px; color:var(--text-body); line-height:1.4;">${escapeHtml(n.message)}</div>
+                  </div>
+                `;
+              });
+              content.innerHTML = html;
+            }
+          }
+        }
+      } catch (e) {
+        console.warn("Error loading notifications:", e);
+      }
+    }
+
+    document.getElementById("btnNotificationsModal").addEventListener("click", () => {
+      document.getElementById("notificationsModal").style.display = "flex";
+      loadUserNotifications();
+      const myUserId = currentUserId || getStoredUserId();
+      if (myUserId) {
+        fetch("/api/notifications/read", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId: myUserId })
+        }).then(() => {
+          const badge = document.getElementById("notificationBadge");
+          if (badge) badge.style.display = "none";
+        }).catch(() => {});
+      }
+    });
+
+    document.getElementById("btnCloseNotifications").addEventListener("click", () => {
+      document.getElementById("notificationsModal").style.display = "none";
+    });
+
+    setInterval(loadUserNotifications, 15000);
+
+    /*
+    ==================================================
     AUTHENTICATION & USER SESSION (SUPABASE AUTH INTEGRATION)
     ==================================================
     */
@@ -4060,6 +4157,7 @@
       } catch (e) {
         setStoredUserSession({ id: user.id, name, email });
       }
+      loadUserNotifications();
     }
 
     function getStoredUserSession() {
@@ -4107,6 +4205,7 @@
     document.getElementById("btnAuthModal").addEventListener("click", () => {
       if (authenticatedUser) {
         if (confirm(`Signed in as ${authenticatedUser.name}. Do you want to sign out?`)) {
+          if (window.supabaseClient) window.supabaseClient.auth.signOut();
           setStoredUserSession(null);
         }
       } else {
@@ -4119,43 +4218,82 @@
     });
 
     document.getElementById("btnGoogleAuth").addEventListener("click", async () => {
+      const msgEl = document.getElementById("authStatusMsg");
+      if (msgEl) msgEl.textContent = "Redirecting to Google Sign-In...";
       if (window.supabaseClient) {
         const { error } = await window.supabaseClient.auth.signInWithOAuth({
           provider: 'google',
           options: { redirectTo: window.location.origin }
         });
-        if (error) alert(error.message || "Google sign in failed.");
+        if (error) {
+          if (msgEl) msgEl.textContent = error.message || "Google OAuth is not enabled in Supabase project settings. Please sign in with Email below.";
+          alert("Google Sign-In notice: " + (error.message || "Google OAuth is not enabled. Please sign in with Email below."));
+        }
       } else {
-        document.getElementById("authName").focus();
-        alert("Google Sign-In requires Supabase Auth OAuth configuration. You can also type your profile name below to sign in.");
+        alert("Supabase Auth initialization in progress. Please try again in a moment.");
       }
     });
 
-    document.getElementById("btnSubmitAuth").addEventListener("click", async () => {
-      const nameInput = document.getElementById("authName");
+    document.getElementById("btnSubmitAuthSignIn").addEventListener("click", async () => {
       const emailInput = document.getElementById("authEmail");
-      const name = nameInput.value.trim();
+      const passwordInput = document.getElementById("authPassword");
+      const msgEl = document.getElementById("authStatusMsg");
       const email = emailInput.value.trim();
+      const password = passwordInput.value.trim();
 
-      if (!name) {
-        alert("Please enter your name.");
+      if (!email || !password) {
+        alert("Please enter both Email Address and Password.");
         return;
       }
 
-      try {
-        const res = await fetch("/api/auth/login", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name, email })
-        });
+      if (msgEl) msgEl.textContent = "Signing in...";
 
-        const data = await res.json();
-        if (!res.ok || !data.profile) throw new Error(data.error || "Sign in failed.");
+      if (window.supabaseClient) {
+        const { data, error } = await window.supabaseClient.auth.signInWithPassword({ email, password });
+        if (error) {
+          if (msgEl) msgEl.textContent = error.message || "Sign in failed.";
+          alert(error.message || "Sign in failed.");
+        } else if (data && data.user) {
+          handleSupabaseUserSession(data.user);
+          document.getElementById("authModal").style.display = "none";
+        }
+      } else {
+        alert("Supabase client initializing...");
+      }
+    });
 
-        setStoredUserSession(data.profile);
-        document.getElementById("authModal").style.display = "none";
-      } catch (e) {
-        alert(e.message || "Sign in failed.");
+    document.getElementById("btnSubmitAuthSignUp").addEventListener("click", async () => {
+      const emailInput = document.getElementById("authEmail");
+      const passwordInput = document.getElementById("authPassword");
+      const msgEl = document.getElementById("authStatusMsg");
+      const email = emailInput.value.trim();
+      const password = passwordInput.value.trim();
+
+      if (!email || !password) {
+        alert("Please enter both Email Address and Password to sign up.");
+        return;
+      }
+
+      if (password.length < 6) {
+        alert("Password must be at least 6 characters.");
+        return;
+      }
+
+      if (msgEl) msgEl.textContent = "Creating account...";
+
+      if (window.supabaseClient) {
+        const { data, error } = await window.supabaseClient.auth.signUp({ email, password });
+        if (error) {
+          if (msgEl) msgEl.textContent = error.message || "Sign up failed.";
+          alert(error.message || "Sign up failed.");
+        } else if (data && data.user) {
+          if (msgEl) msgEl.textContent = "Account created! Check your email or sign in.";
+          alert("Account created successfully! You can now sign in.");
+          handleSupabaseUserSession(data.user);
+          document.getElementById("authModal").style.display = "none";
+        }
+      } else {
+        alert("Supabase client initializing...");
       }
     });
 
